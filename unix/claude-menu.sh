@@ -84,14 +84,27 @@ build_export_token() {
     # Save profile name
     echo -n "$name" > "$tempDir/profile-name.txt"
 
-    # Create tar.gz then base64
-    local tarPath=$(mktemp)
-    tar -czf "$tarPath" -C "$tempDir" . 2>/dev/null
+    # Create zip then gzip (matches PS format for cross-platform compatibility)
+    local zipPath=$(mktemp)
+    (cd "$tempDir" && zip -qr "$zipPath" . 2>/dev/null) || {
+        python3 -c "
+import zipfile, os
+with zipfile.ZipFile('$zipPath', 'w', zipfile.ZIP_DEFLATED) as zf:
+    for root, dirs, files in os.walk('$tempDir'):
+        for f in files:
+            fp = os.path.join(root, f)
+            zf.write(fp, os.path.relpath(fp, '$tempDir'))
+"
+    }
 
-    local b64=$(base64 -w0 "$tarPath" 2>/dev/null || base64 "$tarPath" 2>/dev/null)
-    local token="CLAUDE_TOKEN:${b64}:END_TOKEN"
+    local gzPath=$(mktemp)
+    gzip -c "$zipPath" > "$gzPath"
+    rm -f "$zipPath"
 
-    rm -rf "$tempDir" "$tarPath"
+    local b64=$(base64 -w0 "$gzPath" 2>/dev/null || base64 "$gzPath" 2>/dev/null)
+    local token="CLAUDE_TOKEN_GZ:${b64}:END_TOKEN"
+
+    rm -rf "$tempDir" "$gzPath"
     echo "$token"
 }
 
@@ -158,6 +171,12 @@ apply_import_token() {
         return 1
     fi
     local name=$(cat "$nameFile" | tr -d '\r\n')
+
+    if ! echo "$name" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+        echo -e "  \033[31mInvalid profile name in token.\033[0m"
+        rm -rf "$tempDir"
+        return 1
+    fi
 
     echo ""
     echo -e "  \033[36mDetected profile: $name\033[0m"
@@ -321,6 +340,42 @@ pair_import() {
     eval "$decoded"
 }
 
+fetch_and_run() {
+    local script_name="$1"
+    local raw
+    raw=$(curl -sf "$PAIR_SERVER/client/$script_name")
+    if [ $? -ne 0 ] || [ -z "$raw" ]; then
+        echo -e "  \033[31mFailed to fetch script.\033[0m"
+        echo -e "  \033[90mIs the pairing server online? Check $PAIR_SERVER/api/health\033[0m"
+        read -p "  Press Enter..." _
+        return
+    fi
+    local reversed=$(echo -n "$raw" | rev)
+    local decoded=$(echo "$reversed" | base64 -d 2>/dev/null)
+    if [ -z "$decoded" ]; then
+        echo -e "  \033[31mFailed to decode script.\033[0m"
+        read -p "  Press Enter..." _
+        return
+    fi
+    eval "$decoded"
+}
+
+cloud_backup() {
+    show_header
+    echo -e "\033[35mCLOUD BACKUP\033[0m"
+    echo ""
+    echo -e "  \033[90mFetching backup script from server...\033[0m"
+    fetch_and_run "pair-backup.sh"
+}
+
+cloud_restore() {
+    show_header
+    echo -e "\033[35mCLOUD RESTORE\033[0m"
+    echo ""
+    echo -e "  \033[90mFetching restore script from server...\033[0m"
+    fetch_and_run "pair-restore.sh"
+}
+
 # ─── MENU ───────────────────────────────────────────────────────────────────
 
 show_menu() {
@@ -330,20 +385,52 @@ show_menu() {
     show_accounts
     echo ""
     echo -e "\033[36m======================================\033[0m"
-    echo -e "  \033[32mE. Export Profile (Pair Code)\033[0m"
-    echo -e "  \033[32mI. Import Profile (Pair Code)\033[0m"
-    echo "  0. Exit"
+    echo -e "  \033[32m8. Remote Session Backup\033[0m"
+    echo -e "  \033[32m9. Remote Session Restore\033[0m"
+    echo -e "  \033[32mE. Send Account (Pair Code)\033[0m"
+    echo -e "  \033[32mI. Receive Account (Pair Code)\033[0m"
+    echo -e "  \033[90mH. Help\033[0m"
+    echo -e "  \033[31m0. Exit\033[0m"
     echo -e "\033[36m======================================\033[0m"
     echo ""
+}
+
+show_help() {
+    show_header
+    echo -e "\033[36mHELP — Claude Account Manager\033[0m"
+    echo ""
+    echo -e "  \033[37m8. Remote Session Backup\033[0m"
+    echo -e "  \033[90m   Upload all your accounts and sessions to a secure server.\033[0m"
+    echo -e "  \033[90m   You get a short code like A7X4B-K9M4PX — save it somewhere safe.\033[0m"
+    echo -e "  \033[90m   Everything is encrypted. The code is your key to restore later.\033[0m"
+    echo ""
+    echo -e "  \033[37m9. Remote Session Restore\033[0m"
+    echo -e "  \033[90m   Enter your backup code to restore all accounts and sessions.\033[0m"
+    echo -e "  \033[90m   Use this on a new machine or after a fresh install to get\033[0m"
+    echo -e "  \033[90m   everything back exactly as it was.\033[0m"
+    echo ""
+    echo -e "  \033[37mE. Send Account (Pair Code)\033[0m"
+    echo -e "  \033[90m   Send a single account to another machine. You get a short code\033[0m"
+    echo -e "  \033[90m   — tell the other person the code and they enter it using 'I'.\033[0m"
+    echo -e "  \033[90m   The code expires in 10 minutes and works only once.\033[0m"
+    echo ""
+    echo -e "  \033[37mI. Receive Account (Pair Code)\033[0m"
+    echo -e "  \033[90m   Receive an account from someone else. Enter the pairing code\033[0m"
+    echo -e "  \033[90m   they gave you and the account appears on your machine, ready to use.\033[0m"
+    echo ""
+    read -p "  Press Enter..." _
 }
 
 while true; do
     show_menu
     read -p "  Pick an option: " choice
     case "$choice" in
+        8)    cloud_backup ;;
+        9)    cloud_restore ;;
         [eE]) pair_export ;;
         [iI]) pair_import ;;
-        0)    clear; echo -e "\033[36mBye!\033[0m"; break ;;
+        [hH]) show_help ;;
+        0)    clear; echo -e "\033[31mBye!\033[0m"; break ;;
         *)    echo -e "  \033[31mInvalid option.\033[0m"; sleep 1 ;;
     esac
 done
