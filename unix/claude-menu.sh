@@ -10,6 +10,88 @@ SHARED_PLUGINS_DIR="$SHARED_DIR/plugins"
 SHARED_MARKETPLACES_DIR="$SHARED_PLUGINS_DIR/marketplaces"
 PAIR_SERVER="https://pair.ghackk.com"
 
+# ─── ENSURE CLAUDE CLI INSTALLED ──────────────────────────────────────────
+
+ensure_claude_installed() {
+    command -v claude &>/dev/null && return 0
+
+    echo ""
+    echo -e "  \033[33mClaude CLI is not installed.\033[0m"
+    echo ""
+    echo -e "  \033[36mDetected system:\033[0m"
+
+    local os="" arch="" pkg_manager=""
+    os=$(uname -s)
+    arch=$(uname -m)
+    echo -e "    OS:   $os"
+    echo -e "    Arch: $arch"
+
+    # Detect package manager
+    if command -v brew &>/dev/null; then
+        pkg_manager="brew"
+        echo -e "    Pkg:  Homebrew"
+    elif command -v apt &>/dev/null; then
+        pkg_manager="apt"
+        echo -e "    Pkg:  apt"
+    elif command -v dnf &>/dev/null; then
+        pkg_manager="dnf"
+        echo -e "    Pkg:  dnf"
+    elif command -v yum &>/dev/null; then
+        pkg_manager="yum"
+        echo -e "    Pkg:  yum"
+    elif command -v pacman &>/dev/null; then
+        pkg_manager="pacman"
+        echo -e "    Pkg:  pacman"
+    fi
+
+    echo ""
+    echo -e "  \033[37mInstall Claude CLI now? (y/n)\033[0m"
+    read -p "  > " install_choice
+
+    if [ "$install_choice" != "y" ] && [ "$install_choice" != "Y" ]; then
+        echo -e "  \033[31mClaude CLI is required. Exiting.\033[0m"
+        exit 1
+    fi
+
+    echo ""
+    echo -e "  \033[90mInstalling Claude CLI...\033[0m"
+
+    # Try native installer first (works on all platforms)
+    if curl -fsSL https://claude.ai/install.sh | bash; then
+        echo ""
+        echo -e "  \033[32mClaude CLI installed successfully!\033[0m"
+        # Reload PATH
+        export PATH="$HOME/.claude/bin:$HOME/.local/bin:$PATH"
+        if command -v claude &>/dev/null; then
+            echo -e "  \033[32mclaude version: $(claude --version 2>/dev/null || echo 'installed')\033[0m"
+            return 0
+        fi
+    fi
+
+    # Fallback: try npm
+    if command -v npm &>/dev/null; then
+        echo -e "  \033[90mTrying npm install...\033[0m"
+        npm install -g @anthropic-ai/claude-code 2>/dev/null && {
+            echo -e "  \033[32mClaude CLI installed via npm!\033[0m"
+            return 0
+        }
+    fi
+
+    echo -e "  \033[31mAutomatic install failed.\033[0m"
+    echo -e "  \033[37mManual install options:\033[0m"
+    echo -e "    curl -fsSL https://claude.ai/install.sh | bash"
+    echo -e "    npm install -g @anthropic-ai/claude-code"
+    echo -e "    brew install --cask claude-code"
+    echo ""
+    read -p "  Press Enter to continue anyway..." _
+}
+
+ensure_claude_installed
+
+# ─── ENSURE DIRECTORIES EXIST ────────────────────────────────────────────
+
+mkdir -p "$ACCOUNTS_DIR" "$BACKUP_DIR"
+
 # ─── DISPLAY ────────────────────────────────────────────────────────────────
 
 show_header() {

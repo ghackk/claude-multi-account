@@ -7,6 +7,89 @@ $SHARED_PLUGINS_DIR       = "$SHARED_DIR\plugins"
 $SHARED_MARKETPLACES_DIR  = "$SHARED_PLUGINS_DIR\marketplaces"
 $PAIR_SERVER              = "https://pair.ghackk.com"
 
+# ─── ENSURE CLAUDE CLI INSTALLED ────────────────────────────────────────────
+
+function Ensure-ClaudeInstalled {
+    if (Get-Command claude -ErrorAction SilentlyContinue) { return }
+
+    Write-Host ""
+    Write-Host "  Claude CLI is not installed." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Detected system:" -ForegroundColor Cyan
+    Write-Host "    OS:   Windows $([System.Environment]::OSVersion.Version)" -ForegroundColor White
+    Write-Host "    Arch: $env:PROCESSOR_ARCHITECTURE" -ForegroundColor White
+
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Host "    Pkg:  WinGet" -ForegroundColor White
+    }
+    if (Get-Command scoop -ErrorAction SilentlyContinue) {
+        Write-Host "    Pkg:  Scoop" -ForegroundColor White
+    }
+    if (Get-Command npm -ErrorAction SilentlyContinue) {
+        Write-Host "    Pkg:  npm" -ForegroundColor White
+    }
+
+    Write-Host ""
+    $choice = Read-Host "  Install Claude CLI now? (y/n)"
+    if ($choice -ne "y") {
+        Write-Host "  Claude CLI is required. Exiting." -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host ""
+    Write-Host "  Installing Claude CLI..." -ForegroundColor Gray
+
+    # Try native installer first
+    try {
+        Write-Host "  Trying native installer..." -ForegroundColor Gray
+        Invoke-Expression (Invoke-RestMethod -Uri "https://claude.ai/install.ps1" -ErrorAction Stop)
+        # Refresh PATH
+        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "User") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
+        if (Get-Command claude -ErrorAction SilentlyContinue) {
+            Write-Host "  Claude CLI installed successfully!" -ForegroundColor Green
+            return
+        }
+    } catch {
+        Write-Host "  Native installer failed: $_" -ForegroundColor Gray
+    }
+
+    # Try WinGet
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Host "  Trying WinGet..." -ForegroundColor Gray
+        try {
+            winget install Anthropic.ClaudeCode --accept-source-agreements --accept-package-agreements 2>$null
+            $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "User") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
+            if (Get-Command claude -ErrorAction SilentlyContinue) {
+                Write-Host "  Claude CLI installed via WinGet!" -ForegroundColor Green
+                return
+            }
+        } catch {}
+    }
+
+    # Try npm
+    if (Get-Command npm -ErrorAction SilentlyContinue) {
+        Write-Host "  Trying npm..." -ForegroundColor Gray
+        try {
+            npm install -g @anthropic-ai/claude-code 2>$null
+            if (Get-Command claude -ErrorAction SilentlyContinue) {
+                Write-Host "  Claude CLI installed via npm!" -ForegroundColor Green
+                return
+            }
+        } catch {}
+    }
+
+    Write-Host ""
+    Write-Host "  Automatic install failed." -ForegroundColor Red
+    Write-Host "  Manual install options:" -ForegroundColor White
+    Write-Host "    irm https://claude.ai/install.ps1 | iex" -ForegroundColor Gray
+    Write-Host "    winget install Anthropic.ClaudeCode" -ForegroundColor Gray
+    Write-Host "    npm install -g @anthropic-ai/claude-code" -ForegroundColor Gray
+    Write-Host ""
+    pause
+}
+
+Ensure-ClaudeInstalled
+
 # ─── ENSURE DIRECTORIES EXIST ───────────────────────────────────────────────
 
 if (!(Test-Path $ACCOUNTS_DIR)) { New-Item -ItemType Directory -Path $ACCOUNTS_DIR | Out-Null }
