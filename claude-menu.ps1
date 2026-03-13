@@ -691,6 +691,7 @@ function Apply-ImportToken($token) {
     $launcherSrc = "$extractDir\launcher.bat"
     $launcherDest = "$ACCOUNTS_DIR\$name.bat"
     if (Test-Path $launcherSrc) {
+        if (!(Test-Path $ACCOUNTS_DIR)) { New-Item -ItemType Directory -Path $ACCOUNTS_DIR | Out-Null }
         Copy-Item $launcherSrc $launcherDest -Force
         Write-Host "  Launcher created" -ForegroundColor Green
     }
