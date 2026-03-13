@@ -413,6 +413,12 @@ create_account() {
         return
     fi
 
+    if ! echo "$name" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+        echo -e "  \033[31mName can only contain letters, numbers, hyphens, and underscores.\033[0m"
+        read -p "  Press Enter..." _
+        return
+    fi
+
     local shFile="$ACCOUNTS_DIR/claude-$name.sh"
     if [ -f "$shFile" ]; then
         echo -e "  \033[33mAccount 'claude-$name' already exists!\033[0m"
@@ -726,7 +732,7 @@ apply_import_token() {
             rm -rf "$tempDir" "$rawPath" "$zipPath"
             return 1
         }
-        cd "$tempDir" && unzip -qo "$zipPath" 2>/dev/null
+        (cd "$tempDir" && unzip -qo "$zipPath" 2>/dev/null)
         rm -f "$zipPath"
     else
         tar -xzf "$rawPath" -C "$tempDir" 2>/dev/null || {
