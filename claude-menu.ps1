@@ -658,6 +658,13 @@ function Apply-ImportToken($token) {
     }
     $name = (Get-Content $nameFile -Raw).Trim()
 
+    if ($name -notmatch '^[a-zA-Z0-9_-]+$') {
+        Write-Host "  Invalid profile name in token." -ForegroundColor Red
+        Remove-Item $extractDir -Recurse -Force
+        Remove-Item $zipPath -Force
+        return $false
+    }
+
     Write-Host ""
     Write-Host "  Detected profile: $name" -ForegroundColor Cyan
 
