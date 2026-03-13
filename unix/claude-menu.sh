@@ -141,8 +141,8 @@ pick_account() {
         echo ""
         return
     fi
-    echo ""
-    echo -e "  \033[90m(enter number)\033[0m"
+    echo "" >&2
+    echo -e "  \033[90m(enter number)\033[0m" >&2
     read -p "  $prompt: " choice
     local index=$((choice - 1))
     if [ "$index" -lt 0 ] 2>/dev/null || [ "$index" -ge "${#accounts[@]}" ] 2>/dev/null; then
