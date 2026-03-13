@@ -1255,13 +1255,14 @@ show_menu() {
     echo "  3. Launch Account"
     echo "  4. Rename Account"
     echo -e "  \033[31m5. Delete Account\033[0m"
-    echo "  6. Backup Sessions"
-    echo "  7. Restore Sessions"
-    echo -e "  \033[33m8. Shared Settings (MCP/Skills)\033[0m"
-    echo -e "  \033[35m9. Plugins & Marketplace\033[0m"
-    echo -e "  \033[32mE. Export Profile (Pair Code)\033[0m"
-    echo -e "  \033[32mI. Import Profile (Pair Code)\033[0m"
-    echo "  0. Exit"
+    echo -e "  \033[33m6. Shared Settings (MCP/Skills)\033[0m"
+    echo -e "  \033[35m7. Shared Plugins & Marketplace\033[0m"
+    echo -e "  \033[32m8. Remote Session Backup\033[0m"
+    echo -e "  \033[32m9. Remote Session Restore\033[0m"
+    echo -e "  \033[32mE. Send Account (Pair Code)\033[0m"
+    echo -e "  \033[32mI. Receive Account (Pair Code)\033[0m"
+    echo -e "  \033[90mH. Help\033[0m"
+    echo -e "  \033[31m0. Exit\033[0m"
     echo -e "\033[36m======================================\033[0m"
     echo ""
 }
@@ -1274,23 +1275,23 @@ show_help() {
     echo -e "  \033[90m   Create, launch, rename, and delete Claude CLI accounts.\033[0m"
     echo -e "  \033[90m   Each account gets its own isolated config directory.\033[0m"
     echo ""
-    echo -e "  \033[37m6-7. Backup & Restore\033[0m"
-    echo -e "  \033[90m   Create timestamped local backups of all accounts and settings.\033[0m"
-    echo ""
-    echo -e "  \033[37m8. Shared Settings\033[0m"
+    echo -e "  \033[37m6. Shared Settings (MCP/Skills)\033[0m"
     echo -e "  \033[90m   Define MCP servers, env vars, and CLAUDE.md instructions\033[0m"
     echo -e "  \033[90m   that automatically apply to ALL accounts on launch.\033[0m"
     echo ""
-    echo -e "  \033[37m9. Plugins & Marketplace\033[0m"
+    echo -e "  \033[37m7. Shared Plugins & Marketplace\033[0m"
     echo -e "  \033[90m   Enable/disable plugins globally or per-account.\033[0m"
     echo -e "  \033[90m   Browse and manage marketplace indexes.\033[0m"
     echo ""
-    echo -e "  \033[37mE. Export Profile (Pair Code)\033[0m"
+    echo -e "  \033[37m8-9. Remote Backup & Restore\033[0m"
+    echo -e "  \033[90m   Cloud backup/restore of all accounts and settings.\033[0m"
+    echo ""
+    echo -e "  \033[37mE. Send Account (Pair Code)\033[0m"
     echo -e "  \033[90m   Send a single account to another machine. You get a short code\033[0m"
     echo -e "  \033[90m   like A7X4B-K9M4PX — the other person enters it using 'I'.\033[0m"
     echo -e "  \033[90m   The code expires in 10 minutes and works only once.\033[0m"
     echo ""
-    echo -e "  \033[37mI. Import Profile (Pair Code)\033[0m"
+    echo -e "  \033[37mI. Receive Account (Pair Code)\033[0m"
     echo -e "  \033[90m   Receive an account from someone else. Enter the pairing code\033[0m"
     echo -e "  \033[90m   they gave you and the account appears on your machine.\033[0m"
     echo ""
@@ -1306,10 +1307,10 @@ while true; do
         3)    launch_account ;;
         4)    rename_account ;;
         5)    delete_account ;;
-        6)    backup_sessions ;;
-        7)    restore_sessions ;;
-        8)    manage_shared_settings ;;
-        9)    manage_plugins ;;
+        6)    manage_shared_settings ;;
+        7)    manage_plugins ;;
+        8)    cloud_backup ;;
+        9)    cloud_restore ;;
         [eE]) pair_export ;;
         [iI]) pair_import ;;
         [hH]) show_help ;;
