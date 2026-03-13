@@ -454,6 +454,11 @@ function Create-Account {
         pause; return
     }
 
+    if ($name -notmatch '^[a-zA-Z0-9_-]+$') {
+        Write-Host "  Name can only contain letters, numbers, hyphens, and underscores." -ForegroundColor Red
+        pause; return
+    }
+
     $batFile = "$ACCOUNTS_DIR\claude-$name.bat"
     if (Test-Path $batFile) {
         Write-Host "  Account 'claude-$name' already exists!" -ForegroundColor Yellow
