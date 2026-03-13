@@ -5,9 +5,10 @@
 <p><strong>Run multiple Claude CLI accounts with shared settings, plugins, marketplace sync, and backup/restore.</strong></p>
 
 <p>
+  <a href="https://www.npmjs.com/package/multi-claude"><img src="https://img.shields.io/npm/v/multi-claude?color=cb3837&label=npm" alt="npm"></a>
+  <a href="https://pypi.org/project/multi-claude/"><img src="https://img.shields.io/pypi/v/multi-claude?color=3776ab&label=pip" alt="PyPI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
-  <img src="https://img.shields.io/badge/Shell-PowerShell%20%7C%20Bash-green" alt="Shell">
   <a href="https://github.com/ghackk/claude-multi-account/stargazers"><img src="https://img.shields.io/github/stars/ghackk/claude-multi-account?style=social" alt="GitHub Stars"></a>
 </p>
 
@@ -91,44 +92,68 @@ Add the repo to your PATH — `git pull` instantly updates the menu, no manual c
 
 ---
 
-## Quick Start
+## Install
 
-### Windows
+Pick any method — they all give you the `claude-menu` (or `multi-claude`) command.
 
-```powershell
-# Clone the repo
-git clone https://github.com/ghackk/claude-multi-account.git
-
-# Option A: Add the repo directly to your PATH (recommended — git pull updates instantly)
-[Environment]::SetEnvironmentVariable("PATH", "$HOME\claude-multi-account;" + [Environment]::GetEnvironmentVariable("PATH", "User"), "User")
-
-# Option B: Copy scripts to a separate directory
-New-Item -ItemType Directory -Path "$HOME\claude-accounts" -Force
-Copy-Item claude-multi-account\claude-menu.ps1 "$HOME\claude-accounts\"
-Copy-Item claude-multi-account\claude-menu.bat "$HOME\claude-accounts\"
-
-# Run it (open a new terminal first if you changed PATH)
-claude-menu
-```
-
-### Linux / macOS
+### One-liner (recommended)
 
 ```bash
-# Clone the repo
-git clone https://github.com/ghackk/claude-multi-account.git
-
-# Option A: Add the repo to your PATH (recommended)
-echo 'export PATH="$HOME/claude-multi-account:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-
-# Option B: Copy scripts to a separate directory
-mkdir -p ~/claude-accounts
-cp claude-multi-account/unix/claude-menu.sh ~/claude-accounts/
-chmod +x ~/claude-accounts/claude-menu.sh
-
-# Run it
-claude-menu
+# Linux / macOS
+curl -fsSL https://raw.githubusercontent.com/ghackk/claude-multi-account/master/install.sh | bash
 ```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/ghackk/claude-multi-account/master/install.ps1 | iex
+```
+
+### npm
+
+```bash
+npm install -g multi-claude
+```
+
+### pip
+
+```bash
+pip install multi-claude
+```
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew install ghackk/tap/multi-claude
+```
+
+### Scoop (Windows)
+
+```powershell
+scoop bucket add multi-claude https://github.com/ghackk/scoop-multi-claude
+scoop install multi-claude
+```
+
+### AUR (Arch Linux)
+
+```bash
+yay -S multi-claude
+```
+
+### Manual (git clone)
+
+```bash
+# Linux / macOS
+git clone https://github.com/ghackk/claude-multi-account.git ~/claude-multi-account
+echo 'alias claude-menu="~/claude-multi-account/unix/claude-menu.sh"' >> ~/.bashrc
+```
+
+```powershell
+# Windows
+git clone https://github.com/ghackk/claude-multi-account.git $HOME\claude-multi-account
+[Environment]::SetEnvironmentVariable("PATH", "$HOME\claude-multi-account;" + [Environment]::GetEnvironmentVariable("PATH", "User"), "User")
+```
+
+Then open a new terminal and run `claude-menu`.
 
 ---
 
