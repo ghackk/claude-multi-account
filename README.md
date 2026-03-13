@@ -5,7 +5,7 @@
 <p><strong>Run multiple Claude CLI accounts with shared settings, plugins, marketplace sync, and backup/restore.</strong></p>
 
 <p>
-  <a href="https://www.npmjs.com/package/multi-claude"><img src="https://img.shields.io/npm/v/multi-claude?color=cb3837&label=npm" alt="npm"></a>
+  <a href="https://www.npmjs.com/package/@ghackk/multi-claude"><img src="https://img.shields.io/npm/v/@ghackk/multi-claude?color=cb3837&label=npm" alt="npm"></a>
   <a href="https://pypi.org/project/multi-claude/"><img src="https://img.shields.io/pypi/v/multi-claude?color=3776ab&label=pip" alt="PyPI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
@@ -111,7 +111,7 @@ irm https://raw.githubusercontent.com/ghackk/claude-multi-account/master/install
 ### npm
 
 ```bash
-npm install -g multi-claude
+npm install -g @ghackk/multi-claude
 ```
 
 ### pip
