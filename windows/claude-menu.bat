@@ -1,2 +1,2 @@
 @echo off
-powershell -ExecutionPolicy Bypass -File "%USERPROFILE%\claude-accounts\claude-menu.ps1"
+powershell -ExecutionPolicy Bypass -File "%USERPROFILE%\claude-multi-account\claude-menu.ps1"
