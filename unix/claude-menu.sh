@@ -576,6 +576,8 @@ build_export_token() {
     fi
 
     [ -f "$ACCOUNTS_DIR/$name.sh" ] && cp "$ACCOUNTS_DIR/$name.sh" "$tempDir/launcher.sh"
+    # Also create Windows launcher for cross-platform compatibility
+    printf "@echo off\r\nset CLAUDE_CONFIG_DIR=%%USERPROFILE%%\\.%s\r\nclaude %%*\r\n" "$name" > "$tempDir/launcher.bat"
     echo -n "$name" > "$tempDir/profile-name.txt"
 
     local zipPath=$(mktemp)
@@ -659,7 +661,12 @@ apply_import_token() {
         rm -rf "$tempDir"
         return 1
     fi
-    local name=$(cat "$nameFile" | tr -d '\r\n')
+    local name=$(python3 -c "
+import sys
+data = open('$nameFile', 'rb').read()
+if data[:3] == b'\xef\xbb\xbf': data = data[3:]
+sys.stdout.write(data.decode('utf-8').strip())
+" 2>/dev/null || cat "$nameFile" | tr -d '\r\n')
 
     if ! echo "$name" | grep -qE '^[a-zA-Z0-9_-]+$'; then
         echo -e "  \033[31mInvalid profile name in token.\033[0m"
@@ -692,11 +699,16 @@ apply_import_token() {
     cp -r "$importConfig"/. "$configDir/"
     echo -e "  \033[32mProfile restored (credentials, settings, session)\033[0m"
 
+    mkdir -p "$ACCOUNTS_DIR"
     if [ -f "$tempDir/launcher.sh" ]; then
         cp "$tempDir/launcher.sh" "$ACCOUNTS_DIR/$name.sh"
         chmod +x "$ACCOUNTS_DIR/$name.sh"
-        echo -e "  \033[32mLauncher created\033[0m"
+    else
+        # Cross-platform: generate .sh from profile name if only .bat exists
+        printf '#!/bin/bash\nexport CLAUDE_CONFIG_DIR="$HOME/.%s"\nclaude "$@"\n' "$name" > "$ACCOUNTS_DIR/$name.sh"
+        chmod +x "$ACCOUNTS_DIR/$name.sh"
     fi
+    echo -e "  \033[32mLauncher created\033[0m"
 
     echo ""
     echo -e "  \033[32mProfile '$name' imported successfully!\033[0m"

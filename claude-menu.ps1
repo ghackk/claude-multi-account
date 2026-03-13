@@ -582,7 +582,10 @@ function Build-ExportToken($name) {
     }
 
     Copy-Item $selected.FullName "$tempDir\launcher.bat"
-    $name | Out-File "$tempDir\profile-name.txt" -Encoding UTF8 -NoNewline
+    # Also create Unix launcher for cross-platform compatibility
+    $shContent = "#!/bin/bash`nexport CLAUDE_CONFIG_DIR=`"`$HOME/.$name`"`nclaude `"`$@`""
+    [System.IO.File]::WriteAllText("$tempDir\launcher.sh", $shContent, (New-Object System.Text.UTF8Encoding $false))
+    [System.IO.File]::WriteAllText("$tempDir\profile-name.txt", $name, (New-Object System.Text.UTF8Encoding $false))
 
     $zipPath = "$env:TEMP\claude-export-$name.zip"
     if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
@@ -661,7 +664,11 @@ function Apply-ImportToken($token) {
         Remove-Item $zipPath -Force
         return $false
     }
-    $name = (Get-Content $nameFile -Raw).Trim()
+    $nameRaw = [System.IO.File]::ReadAllBytes($nameFile)
+    if ($nameRaw.Length -ge 3 -and $nameRaw[0] -eq 0xEF -and $nameRaw[1] -eq 0xBB -and $nameRaw[2] -eq 0xBF) {
+        $nameRaw = $nameRaw[3..($nameRaw.Length-1)]
+    }
+    $name = [System.Text.Encoding]::UTF8.GetString($nameRaw).Trim()
 
     Write-Host ""
     Write-Host "  Detected profile: $name" -ForegroundColor Cyan
@@ -694,12 +701,16 @@ function Apply-ImportToken($token) {
     Write-Host "  Profile restored (credentials, settings, session)" -ForegroundColor Green
 
     $launcherSrc = "$extractDir\launcher.bat"
-    $launcherDest = "$ACCOUNTS_DIR\$name.bat"
-    if (Test-Path $launcherSrc) {
-        if (!(Test-Path $ACCOUNTS_DIR)) { New-Item -ItemType Directory -Path $ACCOUNTS_DIR | Out-Null }
-        Copy-Item $launcherSrc $launcherDest -Force
-        Write-Host "  Launcher created" -ForegroundColor Green
+    if (!(Test-Path $launcherSrc)) {
+        # Cross-platform: generate .bat from profile name if only .sh exists
+        $batContent = "@echo off`r`nset CLAUDE_CONFIG_DIR=%USERPROFILE%\.$name`r`nclaude %*"
+        $launcherSrc = "$extractDir\launcher.bat"
+        [System.IO.File]::WriteAllText($launcherSrc, $batContent)
     }
+    $launcherDest = "$ACCOUNTS_DIR\$name.bat"
+    if (!(Test-Path $ACCOUNTS_DIR)) { New-Item -ItemType Directory -Path $ACCOUNTS_DIR | Out-Null }
+    Copy-Item $launcherSrc $launcherDest -Force
+    Write-Host "  Launcher created" -ForegroundColor Green
 
     Write-Host ""
     Write-Host "  Profile '$name' imported successfully!" -ForegroundColor Green
