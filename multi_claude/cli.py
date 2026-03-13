@@ -1,4 +1,4 @@
-"""CLI entry point for claude-multi (pip install)."""
+"""CLI entry point for multi-claude (pip install)."""
 import os
 import sys
 import subprocess
@@ -9,9 +9,22 @@ INSTALL_DIR = os.path.join(os.path.expanduser("~"), "claude-multi-account")
 
 
 def ensure_installed():
-    """Clone the repo on first run if not already present."""
-    if os.path.isdir(os.path.join(INSTALL_DIR, "unix")):
+    """Clone the repo on first run, pull updates if already present."""
+    if os.path.isdir(os.path.join(INSTALL_DIR, ".git")):
+        # Auto-update on each run (silent, non-blocking)
+        try:
+            subprocess.run(
+                ["git", "-C", INSTALL_DIR, "pull", "--quiet"],
+                timeout=10,
+                capture_output=True,
+            )
+        except Exception:
+            pass  # Offline or timeout — run with existing version
         return
+
+    if os.path.isdir(os.path.join(INSTALL_DIR, "unix")):
+        return  # Downloaded via archive, no git
+
     print("First run — downloading claude-multi-account...")
     try:
         subprocess.run(["git", "clone", "--quiet", REPO, INSTALL_DIR], check=True)
