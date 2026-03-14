@@ -7,7 +7,15 @@ const os = require('os');
 if (os.platform() === 'win32') process.exit(0); // Windows npm bin is typically on PATH already
 
 try {
-    const npmBin = execSync('npm bin -g', { encoding: 'utf-8' }).trim();
+    // npm bin -g is deprecated in npm 9+; fall back to npm prefix -g + /bin
+    let npmBin = '';
+    try {
+        npmBin = execSync('npm bin -g 2>/dev/null', { encoding: 'utf-8' }).trim();
+    } catch (_) {}
+    if (!npmBin) {
+        const prefix = execSync('npm prefix -g', { encoding: 'utf-8' }).trim();
+        if (prefix) npmBin = path.join(prefix, 'bin');
+    }
     if (!npmBin) process.exit(0);
 
     // Check if already on PATH
