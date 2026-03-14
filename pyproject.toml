@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "multi-claude"
-version = "1.0.20"
+version = "1.0.21"
 description = "Run multiple Claude CLI accounts with shared settings, plugins, marketplace sync, and backup/restore"
 readme = "README.md"
 license = {text = "MIT"}
