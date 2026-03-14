@@ -227,6 +227,16 @@ ensure_dependencies
 
 mkdir -p "$ACCOUNTS_DIR" "$BACKUP_DIR"
 
+# ─── REGISTER EXISTING LAUNCHERS ON PATH ────────────────────────────────────
+
+for _launcher in "$ACCOUNTS_DIR"/claude-*.sh; do
+    [ -f "$_launcher" ] || continue
+    _cmd=$(basename "$_launcher" .sh)
+    [ -L "$HOME/.local/bin/$_cmd" ] && continue
+    register_launcher "$_cmd"
+done
+unset _launcher _cmd
+
 # ─── DISPLAY ────────────────────────────────────────────────────────────────
 
 show_header() {
