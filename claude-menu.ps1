@@ -95,6 +95,14 @@ Ensure-ClaudeInstalled
 if (!(Test-Path $ACCOUNTS_DIR)) { New-Item -ItemType Directory -Path $ACCOUNTS_DIR | Out-Null }
 if (!(Test-Path $BACKUP_DIR))   { New-Item -ItemType Directory -Path $BACKUP_DIR   | Out-Null }
 
+# ─── ENSURE ACCOUNTS DIR IS ON PATH ──────────────────────────────────────────
+
+$userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+if ($userPath -notlike "*claude-accounts*") {
+    [Environment]::SetEnvironmentVariable("PATH", "$ACCOUNTS_DIR;$userPath", "User")
+    $env:PATH = "$ACCOUNTS_DIR;$env:PATH"
+}
+
 # ─── DISPLAY ─────────────────────────────────────────────────────────────────
 
 function Show-Header {
@@ -544,7 +552,7 @@ function Delete-Account {
     Write-Host ""
     $confirm = Read-Host "  Type YES to confirm deleting all selected"
 
-    if ($confirm.Trim() -ne "YES") {
+    if ($confirm.Trim() -ine "YES" -and $confirm.Trim() -ine "Y") {
         Write-Host "  Cancelled." -ForegroundColor Gray
         pause; return
     }

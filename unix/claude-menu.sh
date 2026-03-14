@@ -10,6 +10,21 @@ SHARED_PLUGINS_DIR="$SHARED_DIR/plugins"
 SHARED_MARKETPLACES_DIR="$SHARED_PLUGINS_DIR/marketplaces"
 PAIR_SERVER="https://pair.ghackk.com"
 
+# ─── LAUNCHER SYMLINK HELPERS ─────────────────────────────────────────────
+
+register_launcher() {
+    local name="$1"  # e.g. "claude-zf"
+    local bin_dir="$HOME/.local/bin"
+    mkdir -p "$bin_dir"
+    ln -sf "$ACCOUNTS_DIR/$name.sh" "$bin_dir/$name"
+}
+
+unregister_launcher() {
+    local name="$1"
+    local link="$HOME/.local/bin/$name"
+    [ -L "$link" ] && rm -f "$link"
+}
+
 # ─── ENSURE CLAUDE CLI INSTALLED ──────────────────────────────────────────
 
 ensure_claude_installed() {
@@ -433,6 +448,7 @@ export CLAUDE_CONFIG_DIR="\$HOME/.claude-$name"
 claude "\$@"
 ENDSH
     chmod +x "$shFile"
+    register_launcher "claude-$name"
 
     # Auto-apply shared settings
     if command -v jq &>/dev/null; then
@@ -507,6 +523,8 @@ rename_account() {
     # Rename launcher
     mv "$ACCOUNTS_DIR/$selected.sh" "$newSh"
     sed -i "s/$selected/$newName/g" "$newSh" 2>/dev/null || sed -i '' "s/$selected/$newName/g" "$newSh"
+    unregister_launcher "$selected"
+    register_launcher "$newName"
 
     # Rename config dir
     local oldConfig="$HOME/.$selected"
@@ -540,13 +558,14 @@ delete_account() {
     echo -e "  \033[33mAccount selected for deletion: $selected\033[0m"
     read -p "  Type YES to confirm: " confirm
 
-    if [ "$confirm" != "YES" ]; then
+    if [[ "${confirm,,}" != "yes" && "${confirm,,}" != "y" ]]; then
         echo -e "  \033[90mCancelled.\033[0m"
         read -p "  Press Enter..." _
         return
     fi
 
     rm -f "$ACCOUNTS_DIR/$selected.sh"
+    unregister_launcher "$selected"
     local configDir="$HOME/.$selected"
     if [ -d "$configDir" ]; then
         rm -rf "$configDir"
@@ -796,6 +815,7 @@ sys.stdout.write(data.decode('utf-8').strip())
         printf '#!/bin/bash\nexport CLAUDE_CONFIG_DIR="$HOME/.%s"\nclaude "$@"\n' "$name" > "$ACCOUNTS_DIR/$name.sh"
         chmod +x "$ACCOUNTS_DIR/$name.sh"
     fi
+    register_launcher "$name"
     echo -e "  \033[32mLauncher created\033[0m"
 
     echo ""

@@ -1,2 +1,2 @@
 """Claude Multi-Account Manager — run multiple Claude CLI accounts with shared settings."""
-__version__ = "1.0.16"
+__version__ = "1.0.17"
