@@ -12,11 +12,27 @@ PAIR_SERVER="https://pair.ghackk.com"
 
 # ─── LAUNCHER SYMLINK HELPERS ─────────────────────────────────────────────
 
-register_launcher() {
-    local name="$1"  # e.g. "claude-zf"
+ensure_local_bin_on_path() {
     local bin_dir="$HOME/.local/bin"
     mkdir -p "$bin_dir"
-    ln -sf "$ACCOUNTS_DIR/$name.sh" "$bin_dir/$name"
+    # Already on PATH in this session?
+    case ":$PATH:" in
+        *":$bin_dir:"*) return ;;
+    esac
+    export PATH="$bin_dir:$PATH"
+    # Persist to shell rc if not already there
+    for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+        [ -f "$rc" ] || continue
+        if ! grep -q '\.local/bin' "$rc" 2>/dev/null; then
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$rc"
+        fi
+    done
+}
+
+register_launcher() {
+    local name="$1"  # e.g. "claude-zf"
+    ensure_local_bin_on_path
+    ln -sf "$ACCOUNTS_DIR/$name.sh" "$HOME/.local/bin/$name"
 }
 
 unregister_launcher() {
