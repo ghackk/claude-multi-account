@@ -90,6 +90,73 @@ function Ensure-ClaudeInstalled {
 
 Ensure-ClaudeInstalled
 
+# ─── DEPENDENCY CHECK ──────────────────────────────────────────────────────
+
+function Ensure-Dependencies {
+    $missing = @()
+    $optional = @()
+
+    # Required
+    if (!(Get-Command git -ErrorAction SilentlyContinue)) { $missing += "git" }
+
+    # Optional but recommended
+    if (!(Get-Command python3 -ErrorAction SilentlyContinue) -and !(Get-Command python -ErrorAction SilentlyContinue)) { $optional += "python" }
+    if (!(Get-Command npm -ErrorAction SilentlyContinue)) { $optional += "npm (Node.js)" }
+
+    if ($missing.Count -eq 0 -and $optional.Count -eq 0) { return }
+
+    Write-Host ""
+    if ($missing.Count -gt 0) {
+        Write-Host "  Missing required dependencies:" -ForegroundColor Red
+        foreach ($dep in $missing) { Write-Host "    x $dep" -ForegroundColor Red }
+    }
+    if ($optional.Count -gt 0) {
+        Write-Host "  Missing optional dependencies:" -ForegroundColor Yellow
+        foreach ($dep in $optional) { Write-Host "    ~ $dep" -ForegroundColor Yellow }
+    }
+
+    Write-Host ""
+    $hasPkg = $false
+    if (Get-Command winget -ErrorAction SilentlyContinue) { $hasPkg = $true }
+    if (Get-Command scoop -ErrorAction SilentlyContinue) { $hasPkg = $true }
+
+    if ($hasPkg) {
+        $choice = Read-Host "  Install missing dependencies now? (y/n)"
+        if ($choice -ieq "y" -or $choice -ieq "yes") {
+            $allDeps = $missing + $optional
+            foreach ($dep in $allDeps) {
+                $pkgName = $dep -replace " \(.*\)", ""
+                Write-Host "  Installing $dep..." -ForegroundColor Gray
+                $installed = $false
+                if (Get-Command winget -ErrorAction SilentlyContinue) {
+                    try {
+                        if ($pkgName -eq "python") { winget install Python.Python.3 --accept-source-agreements --accept-package-agreements 2>$null }
+                        elseif ($pkgName -eq "git") { winget install Git.Git --accept-source-agreements --accept-package-agreements 2>$null }
+                        elseif ($pkgName -eq "npm") { winget install OpenJS.NodeJS --accept-source-agreements --accept-package-agreements 2>$null }
+                        $installed = $true
+                    } catch {}
+                }
+                if (!$installed -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
+                    try {
+                        scoop install $pkgName 2>$null
+                        $installed = $true
+                    } catch {}
+                }
+                if ($installed) { Write-Host "    Done" -ForegroundColor Green }
+                else { Write-Host "    Failed — install manually" -ForegroundColor Red }
+            }
+            # Refresh PATH
+            $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "User") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
+        }
+    } else {
+        Write-Host "  Please install missing dependencies manually." -ForegroundColor Yellow
+    }
+    Write-Host ""
+    pause
+}
+
+Ensure-Dependencies
+
 # ─── ENSURE DIRECTORIES EXIST ───────────────────────────────────────────────
 
 if (!(Test-Path $ACCOUNTS_DIR)) { New-Item -ItemType Directory -Path $ACCOUNTS_DIR | Out-Null }

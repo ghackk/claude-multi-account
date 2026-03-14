@@ -119,6 +119,110 @@ ensure_claude_installed() {
 
 ensure_claude_installed
 
+# ─── DEPENDENCY CHECK ─────────────────────────────────────────────────────
+
+detect_pkg_manager() {
+    if command -v pkg &>/dev/null && [ -d "/data/data/com.termux" ]; then
+        echo "termux"
+    elif command -v brew &>/dev/null; then
+        echo "brew"
+    elif command -v apt &>/dev/null; then
+        echo "apt"
+    elif command -v dnf &>/dev/null; then
+        echo "dnf"
+    elif command -v yum &>/dev/null; then
+        echo "yum"
+    elif command -v pacman &>/dev/null; then
+        echo "pacman"
+    elif command -v apk &>/dev/null; then
+        echo "apk"
+    else
+        echo ""
+    fi
+}
+
+install_pkg() {
+    local pkg="$1"
+    local mgr="$2"
+    case "$mgr" in
+        termux)  pkg install -y "$pkg" 2>/dev/null ;;
+        brew)    brew install "$pkg" 2>/dev/null ;;
+        apt)     sudo apt install -y "$pkg" 2>/dev/null ;;
+        dnf)     sudo dnf install -y "$pkg" 2>/dev/null ;;
+        yum)     sudo yum install -y "$pkg" 2>/dev/null ;;
+        pacman)  sudo pacman -S --noconfirm "$pkg" 2>/dev/null ;;
+        apk)     sudo apk add "$pkg" 2>/dev/null ;;
+        *)       return 1 ;;
+    esac
+}
+
+ensure_dependencies() {
+    local missing=()
+    local optional_missing=()
+
+    # Required dependencies
+    for cmd in curl jq tar gzip; do
+        command -v "$cmd" &>/dev/null || missing+=("$cmd")
+    done
+
+    # Optional but recommended
+    for cmd in python3 zip unzip base64; do
+        command -v "$cmd" &>/dev/null || optional_missing+=("$cmd")
+    done
+
+    [ ${#missing[@]} -eq 0 ] && [ ${#optional_missing[@]} -eq 0 ] && return 0
+
+    echo ""
+    local mgr=$(detect_pkg_manager)
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo -e "  \033[31mMissing required dependencies:\033[0m"
+        for cmd in "${missing[@]}"; do
+            echo -e "    \033[31m✗\033[0m $cmd"
+        done
+    fi
+
+    if [ ${#optional_missing[@]} -gt 0 ]; then
+        echo -e "  \033[33mMissing optional dependencies:\033[0m"
+        for cmd in "${optional_missing[@]}"; do
+            echo -e "    \033[33m~\033[0m $cmd"
+        done
+    fi
+
+    echo ""
+    if [ -n "$mgr" ]; then
+        echo -e "  \033[36mDetected package manager: $mgr\033[0m"
+        echo -e "  \033[37mInstall missing dependencies now? (y/n)\033[0m"
+        read -p "  > " dep_choice
+        if [[ "${dep_choice,,}" == "y" || "${dep_choice,,}" == "yes" ]]; then
+            local all_deps=("${missing[@]}" "${optional_missing[@]}")
+            for cmd in "${all_deps[@]}"; do
+                echo -e "  \033[90mInstalling $cmd...\033[0m"
+                if install_pkg "$cmd" "$mgr"; then
+                    echo -e "    \033[32m✓ $cmd installed\033[0m"
+                else
+                    echo -e "    \033[31m✗ Failed to install $cmd\033[0m"
+                fi
+            done
+        fi
+    else
+        echo -e "  \033[33mCould not detect package manager.\033[0m"
+        echo -e "  \033[37mPlease install manually: ${missing[*]} ${optional_missing[*]}\033[0m"
+    fi
+
+    # Re-check required deps
+    for cmd in curl jq tar gzip; do
+        if ! command -v "$cmd" &>/dev/null; then
+            echo ""
+            echo -e "  \033[31m$cmd is still missing. Some features may not work.\033[0m"
+        fi
+    done
+    echo ""
+    read -p "  Press Enter to continue..." _
+}
+
+ensure_dependencies
+
 # ─── ENSURE DIRECTORIES EXIST ────────────────────────────────────────────
 
 mkdir -p "$ACCOUNTS_DIR" "$BACKUP_DIR"
