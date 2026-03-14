@@ -25,6 +25,8 @@ Claude CLI stores all config in a single `~/.claude/` directory — so you're lo
 - **Isolated profiles** — each account gets its own config directory, no conflicts
 - **Shared settings** — define MCP servers, env vars, plugins, and CLAUDE.md once — auto-applied everywhere
 - **Plugin & marketplace management** — enable plugins globally or per-account, browse marketplace indexes
+- **Direct launch** — run `claude-work` or `claude-personal` directly from any terminal, no menu needed
+- **Cloud backup & restore** — securely sync all profiles to the cloud and restore on any machine
 - **One command** — launch any account instantly from an interactive menu
 
 ---
@@ -64,7 +66,7 @@ Write instructions and skills that apply across every account
 <td>
 
 **Backup & Restore**<br>
-Timestamped archives of all accounts and configs with one click
+Timestamped local archives of all accounts and configs with one click
 
 </td>
 <td>
@@ -77,8 +79,22 @@ Copy a profile between machines as a single base64 token — credentials, settin
 <tr>
 <td>
 
-**Zero Dependencies**<br>
-Just your shell and Claude CLI — nothing else to install
+**Cloud Backup & Restore**<br>
+Securely sync all profiles to the cloud — restore on any machine with a single command
+
+</td>
+<td>
+
+**Direct Profile Launch**<br>
+Each profile is auto-registered on PATH — run `claude-work` directly from any terminal
+
+</td>
+</tr>
+<tr>
+<td>
+
+**Auto Dependency Detection**<br>
+Detects and offers to install missing dependencies (curl, jq, etc.) on first run
 
 </td>
 <td>
@@ -176,12 +192,14 @@ Then open a new terminal and run `claude-menu`.
   3. Launch Account
   4. Rename Account
   5. Delete Account
-  6. Backup Sessions
-  7. Restore Sessions
+  6. Backup Sessions (Local)
+  7. Restore Sessions (Local)
   8. Shared Settings (MCP/Skills)
   9. Plugins & Marketplace
   E. Export Profile (Token)
   I. Import Profile (Token)
+  C. Cloud Backup
+  R. Cloud Restore
   0. Exit
 ======================================
 ```
@@ -222,6 +240,29 @@ Transfer a profile between machines using a copy-pasteable base64 token:
 | I | Import a profile — paste the token to restore the account on any machine |
 
 The token bundles only essentials (credentials, settings, CLAUDE.md, launcher) — not cache or conversation history.
+
+### Cloud Backup & Restore (Options C & R)
+
+Sync all profiles to the cloud and restore on any machine:
+
+| Option | Action |
+|--------|--------|
+| C | Cloud Backup — select profiles and optional folders (shared settings, plugins, etc.) to upload securely |
+| R | Cloud Restore — enter your route key to download and restore all profiles on a new machine |
+
+Profiles are automatically registered on PATH after restore, so you can run `claude-work` immediately.
+
+### Direct Profile Launch
+
+Every profile you create is automatically available as a command:
+
+```bash
+# No need to open the menu — just run the profile name directly
+claude-work
+claude-personal
+```
+
+On **Linux/macOS/Termux**, symlinks are created in `~/.local/bin/`. On **Windows**, the accounts directory is added to your user PATH. Profiles created, imported, or restored are all registered automatically.
 
 ---
 
@@ -291,8 +332,9 @@ For `CLAUDE.md`, shared content is inserted between auto-managed markers at the 
 ## Requirements
 
 - [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed and available in PATH
-- **Windows**: PowerShell 5.1+
-- **Linux/macOS**: Bash 4+, `jq` for JSON merging
+- **Windows**: PowerShell 5.1+ (dependencies auto-detected via winget/scoop)
+- **Linux/macOS**: Bash 4+ (dependencies like `curl`, `jq` auto-detected and offered for install on first run)
+- **Termux**: Supported — dependencies installed via `pkg`
 
 ---
 
