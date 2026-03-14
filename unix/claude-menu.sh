@@ -24,7 +24,7 @@ ensure_local_bin_on_path() {
     for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
         [ -f "$rc" ] || continue
         if ! grep -q '\.local/bin' "$rc" 2>/dev/null; then
-            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$rc"
+            printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$rc"
         fi
     done
 }
