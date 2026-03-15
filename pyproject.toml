@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "multi-claude"
+version = "1.0.23"
+description = "Run multiple Claude CLI accounts with shared settings, plugins, marketplace sync, and backup/restore"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Gyanesh Kumar"}]
+keywords = ["claude", "claude-code", "claude-cli", "multi-account", "anthropic"]
+requires-python = ">=3.7"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://github.com/ghackk/claude-multi-account"
+Repository = "https://github.com/ghackk/claude-multi-account"
+
+[project.scripts]
+multi-claude = "multi_claude.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["multi_claude"]

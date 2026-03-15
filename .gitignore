@@ -1,0 +1,9 @@
+*.zip
+*.tar.gz
+node_modules/
+*.egg-info/
+__pycache__/
+build/
+dist/
+*.pyc
+marketing/
