@@ -249,8 +249,23 @@ show_header() {
 
 # ─── ACCOUNT HELPERS ────────────────────────────────────────────────────────
 
+# Resolve config directory for an account name.
+# "claude" (default) -> ~/.claude, others -> ~/.<name>
+get_config_dir() {
+    local name="$1"
+    if [ "$name" = "claude" ]; then
+        echo "$HOME/.claude"
+    else
+        echo "$HOME/.$name"
+    fi
+}
+
 get_accounts() {
     local files=()
+    # Include default account first if ~/.claude exists
+    if [ -d "$HOME/.claude" ]; then
+        files+=("claude")
+    fi
     for f in "$ACCOUNTS_DIR"/claude-*.sh; do
         [ -f "$f" ] || continue
         local base=$(basename "$f" .sh)
@@ -268,12 +283,14 @@ show_accounts() {
     fi
     local i=1
     for name in "${accounts[@]}"; do
-        local configDir="$HOME/.$name"
+        local configDir=$(get_config_dir "$name")
+        local tag=""
+        [ "$name" = "claude" ] && tag="  [default]"
         if [ -d "$configDir" ]; then
             local lastUsed=$(date -r "$configDir" "+%d %b %Y %I:%M %p" 2>/dev/null || echo "unknown")
-            echo "  $i. $name  [logged in]  (last used: $lastUsed)"
+            echo "  $i. $name${tag}  [logged in]  (last used: $lastUsed)"
         else
-            echo "  $i. $name  [not logged in]  (never used)"
+            echo "  $i. $name${tag}  [not logged in]  (never used)"
         fi
         ((i++))
     done
@@ -354,7 +371,7 @@ ENDMD
 merge_shared_into_account() {
     local accountName="$1"
     ensure_shared_dir
-    local configDir="$HOME/.$accountName"
+    local configDir=$(get_config_dir "$accountName")
     mkdir -p "$configDir"
 
     # --- Merge settings.json ---
@@ -416,15 +433,20 @@ merge_shared_into_account() {
 }
 
 sync_all_accounts() {
-    local accounts=($(get_accounts))
-    if [ ${#accounts[@]} -eq 0 ]; then
-        echo -e "  \033[33mNo accounts to sync.\033[0m"
-        return
+    # Sync default account first if it exists
+    if [ -d "$HOME/.claude" ]; then
+        merge_shared_into_account "claude"
+        echo -e "  \033[32mSynced -> claude [default]\033[0m"
     fi
+    local accounts=($(get_accounts))
     for acc in "${accounts[@]}"; do
+        [ "$acc" = "claude" ] && continue  # already synced above
         merge_shared_into_account "$acc"
         echo -e "  \033[32mSynced -> $acc\033[0m"
     done
+    if [ ${#accounts[@]} -eq 0 ]; then
+        echo -e "  \033[33mNo accounts to sync.\033[0m"
+    fi
 }
 
 # ─── MANAGE SHARED SETTINGS MENU ───────────────────────────────────────────
@@ -619,7 +641,11 @@ launch_account() {
         merge_shared_into_account "$selected"
     fi
     echo -e "  \033[36mLaunching $selected...\033[0m"
-    bash "$ACCOUNTS_DIR/$selected.sh"
+    if [ "$selected" = "claude" ]; then
+        claude
+    else
+        bash "$ACCOUNTS_DIR/$selected.sh"
+    fi
 }
 
 rename_account() {
@@ -635,6 +661,12 @@ rename_account() {
     local selected=$(pick_account "Pick account to rename")
     if [ -z "$selected" ]; then
         echo -e "  \033[31mInvalid choice.\033[0m"
+        read -p "  Press Enter..." _
+        return
+    fi
+
+    if [ "$selected" = "claude" ]; then
+        echo -e "  \033[31mCannot rename the default account.\033[0m"
         read -p "  Press Enter..." _
         return
     fi
@@ -684,6 +716,12 @@ delete_account() {
         return
     fi
 
+    if [ "$selected" = "claude" ]; then
+        echo -e "  \033[31mCannot delete the default account.\033[0m"
+        read -p "  Press Enter..." _
+        return
+    fi
+
     echo ""
     echo -e "  \033[33mAccount selected for deletion: $selected\033[0m"
     read -p "  Type YES to confirm: " confirm
@@ -718,7 +756,7 @@ backup_sessions() {
     local toBackup=("$ACCOUNTS_DIR" "$SHARED_DIR")
     local accounts=($(get_accounts))
     for acc in "${accounts[@]}"; do
-        local config="$HOME/.$acc"
+        local config=$(get_config_dir "$acc")
         [ -d "$config" ] && toBackup+=("$config")
     done
 
@@ -788,7 +826,7 @@ restore_sessions() {
 
 build_export_token() {
     local name="$1"
-    local configDir="$HOME/.$name"
+    local configDir=$(get_config_dir "$name")
     local credFile="$configDir/.credentials.json"
 
     [ -d "$configDir" ] || return 1
@@ -914,7 +952,7 @@ sys.stdout.write(data.decode('utf-8').strip())
     echo ""
     echo -e "  \033[36mDetected profile: $name\033[0m"
 
-    local configDir="$HOME/.$name"
+    local configDir=$(get_config_dir "$name")
     if [ -d "$configDir" ]; then
         echo -e "  \033[33mProfile already exists locally!\033[0m"
         read -p "  Overwrite? (y/n): " confirm
@@ -1127,7 +1165,7 @@ get_all_marketplace_names() {
 
     local accounts=($(get_accounts))
     for acc in "${accounts[@]}"; do
-        local kp="$HOME/.$acc/plugins/known_marketplaces.json"
+        local kp="$(get_config_dir "$acc")/plugins/known_marketplaces.json"
         if [ -f "$kp" ]; then
             local acc_mkts=$(jq -r 'keys[]' "$kp" 2>/dev/null)
             while read -r name; do
@@ -1148,7 +1186,7 @@ get_marketplace_plugins() {
     local dirs=("$SHARED_MARKETPLACES_DIR/$mktName")
     local accounts=($(get_accounts))
     for acc in "${accounts[@]}"; do
-        dirs+=("$HOME/.$acc/plugins/marketplaces/$mktName")
+        dirs+=("$(get_config_dir "$acc")/plugins/marketplaces/$mktName")
     done
 
     for d in "${dirs[@]}"; do
@@ -1273,7 +1311,7 @@ manage_marketplaces() {
                     local found=false
                     local accounts=($(get_accounts))
                     for acc in "${accounts[@]}"; do
-                        local src="$HOME/.$acc/plugins/marketplaces/$mkt"
+                        local src="$(get_config_dir "$acc")/plugins/marketplaces/$mkt"
                         if [ -d "$src" ]; then
                             cp -r "$src"/* "$destDir/" 2>/dev/null
                             echo -e "  \033[32mPulled: $mkt (from $acc)\033[0m"
@@ -1358,8 +1396,9 @@ manage_plugins() {
                 read -p "  Plugin key (name@marketplace): " pluginKey
                 pluginKey=$(echo "$pluginKey" | xargs)
                 [ -z "$pluginKey" ] && { echo -e "  \033[90mCancelled.\033[0m"; read -p "  Press Enter..." _; continue; }
-                local settingsPath="$HOME/.$selected/settings.json"
-                mkdir -p "$HOME/.$selected"
+                local _cfgDir=$(get_config_dir "$selected")
+                local settingsPath="$_cfgDir/settings.json"
+                mkdir -p "$_cfgDir"
                 if [ -f "$settingsPath" ]; then
                     jq --arg key "$pluginKey" '.enabledPlugins[$key] = true' "$settingsPath" > "$settingsPath.tmp" && mv "$settingsPath.tmp" "$settingsPath"
                 else
@@ -1410,7 +1449,7 @@ manage_plugins() {
                 [ ${#accounts[@]} -eq 0 ] && { read -p "  Press Enter..." _; continue; }
                 local selected=$(pick_account "Pick account")
                 [ -z "$selected" ] && { read -p "  Press Enter..." _; continue; }
-                local settingsPath="$HOME/.$selected/settings.json"
+                local settingsPath="$(get_config_dir "$selected")/settings.json"
                 if [ ! -f "$settingsPath" ]; then
                     echo -e "  \033[33mNo settings for $selected.\033[0m"
                     read -p "  Press Enter..." _

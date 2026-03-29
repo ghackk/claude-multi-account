@@ -183,7 +183,17 @@ function Show-Header {
 # ─── ACCOUNT HELPERS ─────────────────────────────────────────────────────────
 
 function Get-Accounts {
-    return Get-ChildItem "$ACCOUNTS_DIR\claude-*.bat" -Exclude "claude-menu.bat" -ErrorAction SilentlyContinue
+    $result = @()
+    # Include default account (~/.claude/) if it exists
+    if (Test-Path "$HOME\.claude") {
+        $result += [PSCustomObject]@{ Name = "claude"; IsDefault = $true; BatFile = $null }
+    }
+    # Include custom bat-file accounts
+    $batFiles = Get-ChildItem "$ACCOUNTS_DIR\claude-*.bat" -Exclude "claude-menu.bat" -ErrorAction SilentlyContinue
+    foreach ($f in $batFiles) {
+        $result += [PSCustomObject]@{ Name = $f.BaseName; IsDefault = $false; BatFile = $f.FullName }
+    }
+    return $result
 }
 
 function Show-Accounts {
@@ -193,22 +203,32 @@ function Show-Accounts {
         return $accounts
     }
     $i = 1
-    foreach ($f in $accounts) {
-        $name = $f.BaseName
-        $configDir = "$HOME\.$name"
+    foreach ($acc in $accounts) {
+        $name = $acc.Name
+        if ($acc.IsDefault) {
+            $configDir = "$HOME\.claude"
+        } else {
+            $configDir = "$HOME\.$name"
+        }
         $loggedIn = if (Test-Path $configDir) { "[logged in]" } else { "[not logged in]" }
         $lastUsed = if (Test-Path $configDir) {
             $d = (Get-Item $configDir).LastWriteTime
             "last used: $($d.ToString('dd MMM yyyy hh:mm tt'))"
         } else { "never used" }
-        Write-Host "  $i. $name  $loggedIn  ($lastUsed)" -ForegroundColor White
+        if ($acc.IsDefault) {
+            Write-Host -NoNewline "  $i. $name  "
+            Write-Host -NoNewline "[default]" -ForegroundColor DarkCyan
+            Write-Host "  $loggedIn  ($lastUsed)" -ForegroundColor White
+        } else {
+            Write-Host "  $i. $name  $loggedIn  ($lastUsed)" -ForegroundColor White
+        }
         $i++
     }
     return $accounts
 }
 
 function Pick-Accounts($prompt, $single = $false) {
-    $accounts = Get-Accounts
+    $accounts = @(Get-Accounts)
     if ($accounts.Count -eq 0) { return $null }
     Write-Host ""
     if ($single) {
@@ -300,7 +320,11 @@ function Ensure-SharedDir {
 
 function Merge-SharedIntoAccount($accountName) {
     Ensure-SharedDir
-    $configDir = "$HOME\.$accountName"
+    if ($accountName -eq "claude") {
+        $configDir = "$HOME\.claude"
+    } else {
+        $configDir = "$HOME\.$accountName"
+    }
     if (!(Test-Path $configDir)) {
         New-Item -ItemType Directory -Path $configDir | Out-Null
     }
@@ -391,8 +415,8 @@ function Sync-AllAccounts {
         return
     }
     foreach ($acc in $accounts) {
-        Merge-SharedIntoAccount $acc.BaseName
-        Write-Host "  Synced -> $($acc.BaseName)" -ForegroundColor Green
+        Merge-SharedIntoAccount $acc.Name
+        Write-Host "  Synced -> $($acc.Name)" -ForegroundColor Green
     }
 }
 
@@ -566,10 +590,14 @@ function Launch-Account {
     if ($null -eq $accs) { pause; return }
     foreach ($acc in $accs) {
         # Auto-sync shared settings before every launch
-        Write-Host "  Applying shared settings to $($acc.BaseName)..." -ForegroundColor Gray
-        Merge-SharedIntoAccount $acc.BaseName
-        Write-Host "  Launching $($acc.BaseName)..." -ForegroundColor Cyan
-        & $acc.FullName
+        Write-Host "  Applying shared settings to $($acc.Name)..." -ForegroundColor Gray
+        Merge-SharedIntoAccount $acc.Name
+        Write-Host "  Launching $($acc.Name)..." -ForegroundColor Cyan
+        if ($acc.IsDefault) {
+            claude
+        } else {
+            & $acc.BatFile
+        }
     }
 }
 
@@ -582,7 +610,11 @@ function Rename-Account {
     if ($null -eq $accs) { pause; return }
 
     foreach ($acc in $accs) {
-        $oldName = $acc.BaseName
+        if ($acc.IsDefault) {
+            Write-Host "  Cannot rename the default account." -ForegroundColor Yellow
+            continue
+        }
+        $oldName = $acc.Name
         $newSuffix = Read-Host "  Enter new name for $oldName"
         $newSuffix = $newSuffix.Trim().ToLower()
         $newName = "claude-$newSuffix"
@@ -593,7 +625,7 @@ function Rename-Account {
             continue
         }
 
-        Rename-Item $acc.FullName $newBat
+        Rename-Item $acc.BatFile $newBat
         (Get-Content $newBat) -replace $oldName, $newName | Set-Content $newBat -Encoding ascii
 
         $oldConfig = "$HOME\.$oldName"
@@ -613,9 +645,20 @@ function Delete-Account {
     $accs = Pick-Accounts "  Pick account(s) to delete"
     if ($null -eq $accs) { pause; return }
 
+    # Filter out default account
+    $deletable = @()
+    foreach ($acc in $accs) {
+        if ($acc.IsDefault) {
+            Write-Host "  Cannot delete the default account." -ForegroundColor Yellow
+        } else {
+            $deletable += $acc
+        }
+    }
+    if ($deletable.Count -eq 0) { pause; return }
+
     Write-Host ""
     Write-Host "  Accounts selected for deletion:" -ForegroundColor Yellow
-    foreach ($acc in $accs) { Write-Host "    - $($acc.BaseName)" -ForegroundColor White }
+    foreach ($acc in $deletable) { Write-Host "    - $($acc.Name)" -ForegroundColor White }
     Write-Host ""
     $confirm = Read-Host "  Type YES to confirm deleting all selected"
 
@@ -624,9 +667,9 @@ function Delete-Account {
         pause; return
     }
 
-    foreach ($acc in $accs) {
-        $name = $acc.BaseName
-        Remove-Item $acc.FullName -Force
+    foreach ($acc in $deletable) {
+        $name = $acc.Name
+        Remove-Item $acc.BatFile -Force
         $configDir = "$HOME\.$name"
         if (Test-Path $configDir) { Remove-Item $configDir -Recurse -Force }
         Write-Host "  Deleted $name" -ForegroundColor Red
@@ -647,7 +690,11 @@ function Backup-Sessions {
     # Include accounts dir, shared dir, and all account config dirs
     $toZip = @($ACCOUNTS_DIR, $SHARED_DIR)
     Get-Accounts | ForEach-Object {
-        $config = "$HOME\.$($_.BaseName)"
+        if ($_.IsDefault) {
+            $config = "$HOME\.claude"
+        } else {
+            $config = "$HOME\.$($_.Name)"
+        }
         if (Test-Path $config) { $toZip += $config }
     }
 
@@ -708,7 +755,7 @@ function Restore-Sessions {
 
 function Build-ExportToken($name) {
     $accounts = Get-Accounts
-    $selected = $accounts | Where-Object { $_.BaseName -eq $name }
+    $selected = $accounts | Where-Object { $_.Name -eq $name }
     if (-not $selected) { return $null }
 
     $configDir = "$HOME\.$name"
@@ -744,7 +791,13 @@ function Build-ExportToken($name) {
         }
     }
 
-    Copy-Item $selected.FullName "$tempDir\launcher.bat"
+    if ($selected.BatFile) {
+        Copy-Item $selected.BatFile "$tempDir\launcher.bat"
+    } else {
+        # Default account - generate a launcher bat
+        $batContent = "@echo off`r`nclaude %*"
+        [System.IO.File]::WriteAllText("$tempDir\launcher.bat", $batContent, [System.Text.Encoding]::ASCII)
+    }
     # Also create Unix launcher for cross-platform compatibility
     $shContent = "#!/bin/bash`nexport CLAUDE_CONFIG_DIR=`"`$HOME/.$name`"`nclaude `"`$@`""
     [System.IO.File]::WriteAllText("$tempDir\launcher.sh", $shContent, (New-Object System.Text.UTF8Encoding $false))
@@ -905,8 +958,12 @@ function Export-Profile {
     }
 
     $selected = $accounts[$index]
-    $name = $selected.BaseName
-    $configDir = "$HOME\.$name"
+    $name = $selected.Name
+    if ($selected.IsDefault) {
+        $configDir = "$HOME\.claude"
+    } else {
+        $configDir = "$HOME\.$name"
+    }
 
     if (!(Test-Path $configDir)) {
         Write-Host "  Config dir not found: $configDir" -ForegroundColor Red
@@ -1058,13 +1115,21 @@ function Write-SharedSettings($obj) {
 }
 
 function Read-AccountSettings($accountName) {
-    $path = "$HOME\.$accountName\settings.json"
+    if ($accountName -eq "claude") {
+        $path = "$HOME\.claude\settings.json"
+    } else {
+        $path = "$HOME\.$accountName\settings.json"
+    }
     if (Test-Path $path) { return Get-Content $path -Raw | ConvertFrom-Json }
     return [PSCustomObject]@{}
 }
 
 function Write-AccountSettings($accountName, $obj) {
-    $dir = "$HOME\.$accountName"
+    if ($accountName -eq "claude") {
+        $dir = "$HOME\.claude"
+    } else {
+        $dir = "$HOME\.$accountName"
+    }
     if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
     Write-JsonNoBOM "$dir\settings.json" ($obj | ConvertTo-Json -Depth 10)
 }
@@ -1074,7 +1139,8 @@ function Pull-MarketplaceToShared($mktName) {
     $destDir = "$SHARED_MARKETPLACES_DIR\$mktName"
     if (!(Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null }
     foreach ($acc in (Get-Accounts)) {
-        $src = "$HOME\.$($acc.BaseName)\plugins\marketplaces\$mktName"
+        $accConfigDir = if ($acc.IsDefault) { "$HOME\.claude" } else { "$HOME\.$($acc.Name)" }
+        $src = "$accConfigDir\plugins\marketplaces\$mktName"
         if (Test-Path $src) {
             Copy-Item "$src\*" $destDir -Recurse -Force -ErrorAction SilentlyContinue
             return $true
@@ -1087,7 +1153,7 @@ function Pull-MarketplaceToShared($mktName) {
 function Get-MarketplacePlugins($mktName) {
     $dirs = @(
         "$SHARED_MARKETPLACES_DIR\$mktName",
-        (Get-Accounts | ForEach-Object { "$HOME\.$($_.BaseName)\plugins\marketplaces\$mktName" })
+        (Get-Accounts | ForEach-Object { if ($_.IsDefault) { "$HOME\.claude\plugins\marketplaces\$mktName" } else { "$HOME\.$($_.Name)\plugins\marketplaces\$mktName" } })
     )
     foreach ($d in $dirs) {
         if (Test-Path "$d\plugins") {
@@ -1109,10 +1175,11 @@ function Get-AllMarketplaceNames {
         $s.extraKnownMarketplaces.PSObject.Properties | ForEach-Object { $names[$_.Name] = "shared" }
     }
     foreach ($acc in (Get-Accounts)) {
-        $kp = "$HOME\.$($acc.BaseName)\plugins\known_marketplaces.json"
+        $accConfigDir = if ($acc.IsDefault) { "$HOME\.claude" } else { "$HOME\.$($acc.Name)" }
+        $kp = "$accConfigDir\plugins\known_marketplaces.json"
         if (Test-Path $kp) {
             (Get-Content $kp -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object {
-                if (-not $names[$_.Name]) { $names[$_.Name] = $acc.BaseName }
+                if (-not $names[$_.Name]) { $names[$_.Name] = $acc.Name }
             }
         }
     }
@@ -1129,15 +1196,15 @@ function Get-AllEnabledPlugins {
         }
     }
     foreach ($acc in (Get-Accounts)) {
-        $as = Read-AccountSettings $acc.BaseName
+        $as = Read-AccountSettings $acc.Name
         if ($as.PSObject.Properties['enabledPlugins']) {
             $as.enabledPlugins.PSObject.Properties | ForEach-Object {
                 if (-not $result[$_.Name]) {
-                    $result[$_.Name] = @{ scope = $acc.BaseName; enabled = $_.Value }
+                    $result[$_.Name] = @{ scope = $acc.Name; enabled = $_.Value }
                 } elseif ($result[$_.Name].scope -eq "shared (all accounts)") {
                     # already shared, skip
                 } else {
-                    $result[$_.Name].scope += ", $($acc.BaseName)"
+                    $result[$_.Name].scope += ", $($acc.Name)"
                 }
             }
         }
@@ -1216,7 +1283,8 @@ function Manage-Marketplaces {
                 $mktName = (Read-Host "  Marketplace name").Trim()
                 Write-Host "  Source: [1] GitHub  [2] URL" -ForegroundColor Gray
                 $srcChoice = Read-Host "  Pick"
-                $as = Read-AccountSettings $acc.BaseName
+                $accName = $acc.Name
+                $as = Read-AccountSettings $accName
                 if (-not $as.PSObject.Properties['extraKnownMarketplaces']) {
                     $as | Add-Member -MemberType NoteProperty -Name 'extraKnownMarketplaces' -Value ([PSCustomObject]@{})
                 }
@@ -1229,8 +1297,8 @@ function Manage-Marketplaces {
                     $entry = [PSCustomObject]@{ source = [PSCustomObject]@{ source = "url"; url = $url } }
                     $as.extraKnownMarketplaces | Add-Member -MemberType NoteProperty -Name $mktName -Value $entry -Force
                 } else { Write-Host "  Invalid." -ForegroundColor Red; pause; break }
-                Write-AccountSettings $acc.BaseName $as
-                Write-Host "  Added '$mktName' to $($acc.BaseName)." -ForegroundColor Green
+                Write-AccountSettings $accName $as
+                Write-Host "  Added '$mktName' to $($acc.Name)." -ForegroundColor Green
                 pause
             }
             "3" {
@@ -1395,13 +1463,14 @@ function Manage-Plugins {
                 Write-Host ""
                 $pluginKey = (Read-Host "  Plugin key (name@marketplace)").Trim()
                 if ([string]::IsNullOrEmpty($pluginKey)) { Write-Host "  Cancelled." -ForegroundColor Gray; pause; break }
-                $as = Read-AccountSettings $acc.BaseName
+                $accName = $acc.Name
+                $as = Read-AccountSettings $accName
                 if (-not $as.PSObject.Properties['enabledPlugins']) {
                     $as | Add-Member -MemberType NoteProperty -Name 'enabledPlugins' -Value ([PSCustomObject]@{})
                 }
                 $as.enabledPlugins | Add-Member -MemberType NoteProperty -Name $pluginKey -Value $true -Force
-                Write-AccountSettings $acc.BaseName $as
-                Write-Host "  '$pluginKey' enabled for $($acc.BaseName)." -ForegroundColor Green
+                Write-AccountSettings $accName $as
+                Write-Host "  '$pluginKey' enabled for $($acc.Name)." -ForegroundColor Green
                 pause
             }
             "3" {
@@ -1435,10 +1504,11 @@ function Manage-Plugins {
                 $accs = Pick-Accounts "  Pick account" $true
                 if ($null -eq $accs) { pause; break }
                 $acc = $accs[0]
-                $as  = Read-AccountSettings $acc.BaseName
+                $accName = $acc.Name
+                $as  = Read-AccountSettings $accName
                 if (-not $as.PSObject.Properties['enabledPlugins'] -or
                     ($as.enabledPlugins.PSObject.Properties | Measure-Object).Count -eq 0) {
-                    Write-Host "  No plugins configured for $($acc.BaseName)." -ForegroundColor Yellow
+                    Write-Host "  No plugins configured for $($acc.Name)." -ForegroundColor Yellow
                     pause; break
                 }
                 $keys = @($as.enabledPlugins.PSObject.Properties | ForEach-Object { $_.Name })
@@ -1448,8 +1518,8 @@ function Manage-Plugins {
                 if ($pick -lt 0 -or $pick -ge $keys.Count) { Write-Host "  Invalid." -ForegroundColor Red; pause; break }
                 $toRemove = $keys[$pick]
                 $as.enabledPlugins.PSObject.Properties.Remove($toRemove)
-                Write-AccountSettings $acc.BaseName $as
-                Write-Host "  '$toRemove' disabled for $($acc.BaseName)." -ForegroundColor Green
+                Write-AccountSettings $accName $as
+                Write-Host "  '$toRemove' disabled for $($acc.Name)." -ForegroundColor Green
                 pause
             }
             "5" {
