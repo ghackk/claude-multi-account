@@ -758,7 +758,11 @@ function Build-ExportToken($name) {
     $selected = $accounts | Where-Object { $_.Name -eq $name }
     if (-not $selected) { return $null }
 
-    $configDir = "$HOME\.$name"
+    if ($selected.IsDefault) {
+        $configDir = "$HOME\.claude"
+    } else {
+        $configDir = "$HOME\.$name"
+    }
     if (!(Test-Path $configDir)) { return $null }
 
     $credFile = "$configDir\.credentials.json"
@@ -889,7 +893,11 @@ function Apply-ImportToken($token) {
     Write-Host ""
     Write-Host "  Detected profile: $name" -ForegroundColor Cyan
 
-    $configDir = "$HOME\.$name"
+    if ($name -eq "claude") {
+        $configDir = "$HOME\.claude"
+    } else {
+        $configDir = "$HOME\.$name"
+    }
     if (Test-Path $configDir) {
         Write-Host "  Profile already exists locally!" -ForegroundColor Yellow
         $confirm = Read-Host "  Overwrite? (y/n)"
@@ -916,17 +924,21 @@ function Apply-ImportToken($token) {
     }
     Write-Host "  Profile restored (credentials, settings, session)" -ForegroundColor Green
 
-    $launcherSrc = "$extractDir\launcher.bat"
-    if (!(Test-Path $launcherSrc)) {
-        # Cross-platform: generate .bat from profile name if only .sh exists
-        $batContent = "@echo off`r`nset CLAUDE_CONFIG_DIR=%USERPROFILE%\.$name`r`nclaude %*"
+    if ($name -ne "claude") {
         $launcherSrc = "$extractDir\launcher.bat"
-        [System.IO.File]::WriteAllText($launcherSrc, $batContent)
+        if (!(Test-Path $launcherSrc)) {
+            # Cross-platform: generate .bat from profile name if only .sh exists
+            $batContent = "@echo off`r`nset CLAUDE_CONFIG_DIR=%USERPROFILE%\.$name`r`nclaude %*"
+            $launcherSrc = "$extractDir\launcher.bat"
+            [System.IO.File]::WriteAllText($launcherSrc, $batContent)
+        }
+        $launcherDest = "$ACCOUNTS_DIR\$name.bat"
+        if (!(Test-Path $ACCOUNTS_DIR)) { New-Item -ItemType Directory -Path $ACCOUNTS_DIR | Out-Null }
+        Copy-Item $launcherSrc $launcherDest -Force
+        Write-Host "  Launcher created" -ForegroundColor Green
+    } else {
+        Write-Host "  Default account — no launcher needed" -ForegroundColor Gray
     }
-    $launcherDest = "$ACCOUNTS_DIR\$name.bat"
-    if (!(Test-Path $ACCOUNTS_DIR)) { New-Item -ItemType Directory -Path $ACCOUNTS_DIR | Out-Null }
-    Copy-Item $launcherSrc $launcherDest -Force
-    Write-Host "  Launcher created" -ForegroundColor Green
 
     Write-Host ""
     Write-Host "  Profile '$name' imported successfully!" -ForegroundColor Green

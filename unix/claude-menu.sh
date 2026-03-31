@@ -850,9 +850,11 @@ build_export_token() {
         done
     fi
 
-    [ -f "$ACCOUNTS_DIR/$name.sh" ] && cp "$ACCOUNTS_DIR/$name.sh" "$tempDir/launcher.sh"
-    # Also create Windows launcher for cross-platform compatibility
-    printf "@echo off\r\nset CLAUDE_CONFIG_DIR=%%USERPROFILE%%\\.%s\r\nclaude %%*\r\n" "$name" > "$tempDir/launcher.bat"
+    if [ "$name" != "claude" ]; then
+        [ -f "$ACCOUNTS_DIR/$name.sh" ] && cp "$ACCOUNTS_DIR/$name.sh" "$tempDir/launcher.sh"
+        # Also create Windows launcher for cross-platform compatibility
+        printf "@echo off\r\nset CLAUDE_CONFIG_DIR=%%USERPROFILE%%\\.%s\r\nclaude %%*\r\n" "$name" > "$tempDir/launcher.bat"
+    fi
     echo -n "$name" > "$tempDir/profile-name.txt"
 
     local zipPath=$(mktemp)
@@ -974,17 +976,20 @@ sys.stdout.write(data.decode('utf-8').strip())
     cp -r "$importConfig"/. "$configDir/"
     echo -e "  \033[32mProfile restored (credentials, settings, session)\033[0m"
 
-    mkdir -p "$ACCOUNTS_DIR"
-    if [ -f "$tempDir/launcher.sh" ]; then
-        cp "$tempDir/launcher.sh" "$ACCOUNTS_DIR/$name.sh"
-        chmod +x "$ACCOUNTS_DIR/$name.sh"
-    else
-        # Cross-platform: generate .sh from profile name if only .bat exists
-        printf '#!/bin/bash\nexport CLAUDE_CONFIG_DIR="$HOME/.%s"\nclaude "$@"\n' "$name" > "$ACCOUNTS_DIR/$name.sh"
-        chmod +x "$ACCOUNTS_DIR/$name.sh"
+    # Skip launcher creation for the default "claude" account (it's the system default)
+    if [ "$name" != "claude" ]; then
+        mkdir -p "$ACCOUNTS_DIR"
+        if [ -f "$tempDir/launcher.sh" ]; then
+            cp "$tempDir/launcher.sh" "$ACCOUNTS_DIR/$name.sh"
+            chmod +x "$ACCOUNTS_DIR/$name.sh"
+        else
+            # Cross-platform: generate .sh from profile name if only .bat exists
+            printf '#!/bin/bash\nexport CLAUDE_CONFIG_DIR="$HOME/.%s"\nclaude "$@"\n' "$name" > "$ACCOUNTS_DIR/$name.sh"
+            chmod +x "$ACCOUNTS_DIR/$name.sh"
+        fi
+        register_launcher "$name"
+        echo -e "  \033[32mLauncher created\033[0m"
     fi
-    register_launcher "$name"
-    echo -e "  \033[32mLauncher created\033[0m"
 
     echo ""
     echo -e "  \033[32mProfile '$name' imported successfully!\033[0m"
