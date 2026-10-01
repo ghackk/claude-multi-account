@@ -42,7 +42,7 @@ claude-menu
 New-Item -ItemType Directory -Path "$HOME\claude-accounts" -Force
 
 # Copy scripts
-Copy-Item windows\claude-menu.ps1 "$HOME\claude-accounts\"
+Copy-Item claude-menu.ps1 "$HOME\claude-accounts\"
 Copy-Item windows\claude-menu.bat "$HOME\claude-accounts\"
 ```
 

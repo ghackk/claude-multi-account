@@ -7,3 +7,8 @@ build/
 dist/
 *.pyc
 marketing/
+
+# Personal account launchers (created by the menu); never commit
+claude-*.bat
+!claude-menu.bat
+!windows/claude-menu.bat
