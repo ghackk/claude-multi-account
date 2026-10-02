@@ -10,7 +10,7 @@ function plist(home,node) {
 <plist version="1.0"><dict>
 <key>Label</key><string>${label}</string>
 <key>ProgramArguments</key><array><string>${xml(node)}</string><string>--disable-warning=ExperimentalWarning</string><string>${xml(report)}</string></array>
-<key>StartInterval</key><integer>1800</integer>
+<key>StartInterval</key><integer>900</integer>
 <key>RunAtLoad</key><true/>
 <key>EnvironmentVariables</key><dict><key>HOME</key><string>${xml(home)}</string><key>PATH</key><string>${xml(path.dirname(node))}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
 <key>StandardOutPath</key><string>/dev/null</string><key>StandardErrorPath</key><string>/dev/null</string>

@@ -872,6 +872,8 @@ function Build-ExportToken($name) {
 }
 
 function Apply-ImportToken($token) {
+    $script:LastImportedProfile = $null
+    $script:LastImportCancelled = $false
     $isGz = $token.StartsWith("CLAUDE_TOKEN_GZ:")
     $isPlain = $token.StartsWith("CLAUDE_TOKEN:")
 
@@ -946,6 +948,7 @@ function Apply-ImportToken($token) {
         Write-Host "  Profile already exists locally!" -ForegroundColor Yellow
         $confirm = Read-Host "  Overwrite? (y/n)"
         if ($confirm -ne "y") {
+             $script:LastImportCancelled = $true
             Write-Host "  Cancelled." -ForegroundColor Gray
             Remove-Item $extractDir -Recurse -Force
             Remove-Item $zipPath -Force
@@ -995,6 +998,7 @@ function Apply-ImportToken($token) {
 
     Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+    $script:LastImportedProfile = $name
     return $true
 }
 

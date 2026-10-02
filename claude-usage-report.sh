@@ -19,7 +19,7 @@ case "${1:-}" in
       REPORT_CRON=$(mktemp)
       crontab -l 2>/dev/null | sed '/# multi-claude-usage$/d' > "$REPORT_CRON"
       if [ ! -f "$HOME/claude-usage-history/reporting-disabled" ]; then
-        printf '*/30 * * * * PATH="%s:/usr/local/bin:/usr/bin:/bin" /bin/bash "%s/claude-accounts/claude-usage-report.sh" >/dev/null 2>&1 # multi-claude-usage\n' "$(dirname "$REPORT_NODE")" "$HOME" >> "$REPORT_CRON"
+        printf '*/15 * * * * PATH="%s:/usr/local/bin:/usr/bin:/bin" /bin/bash "%s/claude-accounts/claude-usage-report.sh" >/dev/null 2>&1 # multi-claude-usage\n' "$(dirname "$REPORT_NODE")" "$HOME" >> "$REPORT_CRON"
       fi
       crontab "$REPORT_CRON"; REPORT_CRON_STATUS=$?; rm -f "$REPORT_CRON"
       [ "$REPORT_CRON_STATUS" -eq 0 ] || exit "$REPORT_CRON_STATUS"

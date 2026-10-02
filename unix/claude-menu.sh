@@ -934,6 +934,8 @@ build_export_token() {
 }
 
 apply_import_token() {
+    LAST_IMPORTED_PROFILE=""
+    LAST_IMPORT_CANCELLED=0
     local token="$1"
 
     local isGz=false
@@ -1007,6 +1009,7 @@ apply_import_token() {
         echo -e "  \033[33mProfile already exists locally!\033[0m"
         read -p "  Overwrite? (y/n): " confirm
         if [ "$confirm" != "y" ]; then
+            LAST_IMPORT_CANCELLED=1
             echo -e "  \033[90mCancelled.\033[0m"
             rm -rf "$tempDir"
             return 1
@@ -1026,10 +1029,10 @@ apply_import_token() {
         rm -f "$importConfig/.credentials.json"
     fi
     if [ "$name" = claude ] && [ -f "$importConfig/.claude.json" ]; then
-        cp "$importConfig/.claude.json" "$HOME/.claude.json"
+        cp "$importConfig/.claude.json" "$HOME/.claude.json" || { rm -rf "$tempDir"; return 1; }
         rm -f "$importConfig/.claude.json"
     fi
-    cp -r "$importConfig"/. "$configDir/"
+    cp -r "$importConfig"/. "$configDir/" || { rm -rf "$tempDir"; return 1; }
     echo -e "  \033[32mProfile restored (credentials, settings, session)\033[0m"
 
     # Skip launcher creation for the default "claude" account (it's the system default)
@@ -1048,6 +1051,7 @@ apply_import_token() {
     echo -e "  \033[36mRun $name to start.\033[0m"
 
     rm -rf "$tempDir"
+    LAST_IMPORTED_PROFILE="$name"
     return 0
 }
 

@@ -15,7 +15,7 @@ async function upload(db,dev) {
   while(true) {
     const messages=db.prepare('SELECT * FROM messages WHERE dirty=1 ORDER BY email,id LIMIT 1000').all();
     if(!first&&!messages.length) break;
-    const payload={version:1,device:dev,profiles:first?profiles:[],messages};
+    const payload={version:1,client:{version:require('./version'),heartbeat_minutes:15,sharing_protocol:2},device:dev,profiles:first?profiles:[],messages};
     const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','X-Client':'claude-pair'},body:JSON.stringify(payload),signal:AbortSignal.timeout(20000)});
     if(!r.ok) throw new Error(`Report HTTP ${r.status}`);
     const result=await r.json(); if(result.accepted!==messages.length) throw new Error('Invalid report acknowledgement');
@@ -29,6 +29,7 @@ async function upload(db,dev) {
   return sent;
 }
 async function run(cmd='report') {
+  if(cmd==='report')await require('./sharing').flush();
   if(cmd==='merge') {
     const source=process.argv[3];if(!source)throw new Error('Usage: report.js merge /path/to/usage.db');
     const release=C.lock();if(!release)throw new Error('Reporter is running; try again shortly.');
