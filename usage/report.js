@@ -87,7 +87,7 @@ function serve() {
         D.labelDevice(db,JSON.parse(body));res.setHeader('Content-Type','application/json');res.end('{"ok":true}');
       } catch {res.writeHead(400,{'Content-Type':'application/json'});res.end('{"error":"Invalid device update"}');}
     } else if(req.method==='GET'&&u.pathname==='/'){
-      res.setHeader('Content-Type','text/html; charset=utf-8');res.end(fs.readFileSync(path.join(__dirname,'dashboard.html')));
+      res.writeHead(303,{Location:'https://pair.ghackk.com/'});res.end();
     } else {res.writeHead(404);res.end();}
   });
   server.on('error',e=>{db.close();if(e.code==='EADDRINUSE')process.exit(0);else throw e;});

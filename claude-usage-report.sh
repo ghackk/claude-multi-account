@@ -36,8 +36,7 @@ case "${1:-}" in
     "$REPORT_NODE" --disable-warning=ExperimentalWarning "$REPORT_ROOT/usage/report.js" enable
     bash "$REPORT_ROOT/claude-usage-report.sh" --install ;;
   --dashboard)
-    nohup "$REPORT_NODE" --disable-warning=ExperimentalWarning "$REPORT_ROOT/usage/report.js" serve >/dev/null 2>&1 </dev/null &
-    if command -v open >/dev/null 2>&1; then open http://127.0.0.1:3142; elif command -v xdg-open >/dev/null 2>&1; then xdg-open http://127.0.0.1:3142; else echo http://127.0.0.1:3142; fi ;;
+    if command -v open >/dev/null 2>&1; then open https://pair.ghackk.com/; elif command -v xdg-open >/dev/null 2>&1; then xdg-open https://pair.ghackk.com/; else echo https://pair.ghackk.com/; fi ;;
   --background)
     [ "${MULTI_CLAUDE_NO_REPORT:-}" = 1 ] && exit 0
     nohup "$REPORT_NODE" --disable-warning=ExperimentalWarning "$REPORT_ROOT/usage/report.js" >/dev/null 2>&1 </dev/null & ;;

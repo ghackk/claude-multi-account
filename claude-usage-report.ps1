@@ -1,4 +1,4 @@
-param([switch]$Background, [switch]$Install, [switch]$Disable, [switch]$Enable, [switch]$Dashboard)
+﻿param([switch]$Background, [switch]$Install, [switch]$Disable, [switch]$Enable, [switch]$Dashboard)
 $ErrorActionPreference = 'Stop'
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (!$node) { if ($Install) { Write-Warning 'Usage history needs Node.js 22.13 or newer.' }; return }
@@ -19,8 +19,7 @@ if ($Install) {
 if ($Disable) { & $node.Source --disable-warning=ExperimentalWarning $report disable; Disable-ScheduledTask -TaskName 'Claude usage history' -ErrorAction SilentlyContinue | Out-Null; return }
 if ($Enable) { & $node.Source --disable-warning=ExperimentalWarning $report enable; Enable-ScheduledTask -TaskName 'Claude usage history' -ErrorAction SilentlyContinue | Out-Null; & $PSCommandPath -Background; return }
 if ($Dashboard) {
-    Start-Process -FilePath $node.Source -WindowStyle Hidden -ArgumentList "--disable-warning=ExperimentalWarning `"$report`" serve"
-    Start-Process 'http://127.0.0.1:3142'
+    Start-Process 'https://pair.ghackk.com/'
     return
 }
 if ($Background) {

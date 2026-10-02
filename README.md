@@ -427,7 +427,7 @@ Built by **[Gyanesh Kumar](https://github.com/ghackk)**
 
 ## Usage history (v1.0.26)
 
-Choose **U** in either menu to open the local dashboard, enable/disable reporting, or merge another PC's history. Usage is keyed by normalized email and reply ID: renaming `claude-zf` to `claude-zafff`, creating another profile for the same email, or reporting from a laptop with empty history never resets the server's all-time totals. Restored copies are deduplicated.
+Choose **U** in either menu to open the login-protected hosted dashboard, enable/disable reporting, or merge another PC's history. Usage is keyed by normalized email and reply ID: renaming `claude-zf` to `claude-zafff`, creating another profile for the same email, or reporting from a laptop with empty history never resets the server's all-time totals. Restored copies are deduplicated.
 
 The menu installs background session hooks, launcher triggers, and a 30-minute Windows scheduled task, macOS LaunchAgent, or Linux cron entry. Requires Node.js 22.13+. The dashboard shows UTC periods, model/month/device totals, account limits, and Claude Code's stats-cache comparison. [Usage tracking details](docs/usage-tracking.md).
 
