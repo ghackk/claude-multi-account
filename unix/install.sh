@@ -1,22 +1,17 @@
 #!/bin/bash
-# ─── Claude Account Manager Installer (Unix) ───────────────────────────────
-
-set -e
-
-INSTALL_DIR="$HOME/claude-accounts"
-
-echo "Installing Claude Account Manager..."
-mkdir -p "$INSTALL_DIR/unix"
-
-# Copy scripts
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cp "$SCRIPT_DIR/claude-menu.sh" "$INSTALL_DIR/unix/claude-menu.sh"
-chmod +x "$INSTALL_DIR/unix/claude-menu.sh"
-
-# Create alias helper
-echo ""
-echo "Add this to your ~/.bashrc or ~/.zshrc:"
-echo ""
-echo "  alias claude-menu='$INSTALL_DIR/unix/claude-menu.sh'"
-echo ""
-echo "Done! Run 'claude-menu' to start."
+set -eo pipefail
+SOURCE_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+INSTALL_ROOT="$HOME/claude-multi-account"
+if [ "$SOURCE_ROOT" != "$INSTALL_ROOT" ]; then
+    mkdir -p "$INSTALL_ROOT/unix" "$INSTALL_ROOT/usage"
+    cp "$SOURCE_ROOT/unix/claude-menu.sh" "$SOURCE_ROOT/unix/archive.py" "$INSTALL_ROOT/unix/"
+    cp "$SOURCE_ROOT"/claude-usage-report.* "$INSTALL_ROOT/"
+    cp "$SOURCE_ROOT/usage/"* "$INSTALL_ROOT/usage/"
+fi
+chmod +x "$INSTALL_ROOT/unix/claude-menu.sh"
+mkdir -p "$HOME/.local/bin"
+ln -sf "$INSTALL_ROOT/unix/claude-menu.sh" "$HOME/.local/bin/multi-claude"
+ln -sf "$INSTALL_ROOT/unix/claude-menu.sh" "$HOME/.local/bin/claude-menu"
+MULTI_CLAUDE_LIBRARY_ONLY=1 source "$INSTALL_ROOT/unix/claude-menu.sh"
+ensure_local_bin_on_path
+echo 'Installed. Open a new terminal and run multi-claude.'

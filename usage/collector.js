@@ -114,7 +114,7 @@ function collect(db) {
 async function limits(db,list) {
   const checkedEmails=new Set();
   // Several profiles can share an email; prefer a usable token over an empty/default profile.
-  const candidates=list.map(p=>({...p,auth:readJSON(path.join(p.dir,'.credentials.json'))?.claudeAiOauth}));
+  const candidates=list.map(p=>({...p,auth:require('./credentials').read(p.dir,p.dir===path.join(home,'.claude'))?.claudeAiOauth}));
   candidates.sort((a,b)=>(Number(b.auth?.expiresAt)||0)-(Number(a.auth?.expiresAt)||0));
   for(const p of candidates) {
     if(checkedEmails.has(p.email)) continue;

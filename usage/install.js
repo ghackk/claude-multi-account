@@ -43,7 +43,7 @@ function hooks(dir){
 }
 function install(){
   require('node:sqlite');fs.mkdirSync(path.join(target,'usage'),{recursive:true});
-  for(const name of ['database.js','collector.js','report.js','install.js','dashboard.html'])copy(path.join(source,'usage',name),path.join(target,'usage',name));
+  for(const name of ['database.js','collector.js','credentials.js','report.js','install.js','dashboard.html'])copy(path.join(source,'usage',name),path.join(target,'usage',name));
   for(const name of ['claude-usage-report.ps1','claude-usage-report.sh'])copy(path.join(source,name),path.join(target,name));
   for(const entry of fs.readdirSync(target))if(/^claude-.*\.(bat|sh)$/.test(entry)&&!entry.startsWith('claude-usage-report'))patchLauncher(path.join(target,entry));
   const dirs=fs.readdirSync(C.home,{withFileTypes:true}).filter(e=>e.isDirectory()&&(e.name==='.claude'||e.name.startsWith('.claude-'))).map(e=>path.join(C.home,e.name));

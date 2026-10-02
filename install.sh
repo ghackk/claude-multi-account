@@ -2,7 +2,7 @@
 # ─── Claude Multi-Account — One-line Installer (Linux/macOS) ─────────────────
 # curl -fsSL https://raw.githubusercontent.com/ghackk/claude-multi-account/master/install.sh | bash
 
-set -e
+set -eo pipefail
 
 REPO="https://github.com/ghackk/claude-multi-account.git"
 INSTALL_DIR="$HOME/claude-multi-account"

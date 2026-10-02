@@ -8,22 +8,35 @@ SHARED_SETTINGS="$SHARED_DIR/settings.json"
 SHARED_CLAUDE="$SHARED_DIR/CLAUDE.md"
 SHARED_PLUGINS_DIR="$SHARED_DIR/plugins"
 SHARED_MARKETPLACES_DIR="$SHARED_PLUGINS_DIR/marketplaces"
-PAIR_SERVER="https://pair.ghackk.com"
+PAIR_SERVER="${MULTI_CLAUDE_PAIR_SERVER:-https://pair.ghackk.com}"
+# macOS GUI/clean shells may omit native Claude and Homebrew from PATH.
+export PATH="$HOME/.local/bin:$HOME/.claude/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+_menu_source=${BASH_SOURCE[0]}
+while [ -L "$_menu_source" ]; do
+    _menu_base=$(cd -P "$(dirname "$_menu_source")" && pwd)
+    _menu_source=$(readlink "$_menu_source")
+    [[ $_menu_source != /* ]] && _menu_source="$_menu_base/$_menu_source"
+done
+MENU_ROOT=$(cd -P "$(dirname "$_menu_source")/.." && pwd)
+credential_helper() { node "$MENU_ROOT/usage/credentials.js" "$@"; }
+credential_kind() { [ "$1" = claude ] && printf default || printf profile; }
+archive_helper() { python3 "$MENU_ROOT/unix/archive.py" "$@"; }
+base64_decode() {
+    if [ "$(uname -s)" = Darwin ]; then base64 -D; else base64 -d; fi
+}
 
 # ─── LAUNCHER SYMLINK HELPERS ─────────────────────────────────────────────
 
 ensure_local_bin_on_path() {
     local bin_dir="$HOME/.local/bin"
     mkdir -p "$bin_dir"
-    # Already on PATH in this session?
-    case ":$PATH:" in
-        *":$bin_dir:"*) return ;;
-    esac
-    export PATH="$bin_dir:$PATH"
-    # Persist to shell rc if not already there
-    for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+    local preferred="$HOME/.bashrc"
+    case "${SHELL:-}" in */zsh) preferred="$HOME/.zshrc" ;; esac
+    [ "$(uname -s)" != Darwin ] || preferred="$HOME/.zshrc"
+    touch "$preferred"
+    for rc in "$preferred" "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.bash_profile" "$HOME/.profile"; do
         [ -f "$rc" ] || continue
-        if ! grep -q '\.local/bin' "$rc" 2>/dev/null; then
+        if ! grep -qF 'export PATH="$HOME/.local/bin:$PATH"' "$rc" 2>/dev/null; then
             printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$rc"
         fi
     done
@@ -117,7 +130,7 @@ ensure_claude_installed() {
     read -p "  Press Enter to continue anyway..." _
 }
 
-ensure_claude_installed
+[ "${MULTI_CLAUDE_LIBRARY_ONLY:-}" = 1 ] || ensure_claude_installed
 
 # ─── DEPENDENCY CHECK ─────────────────────────────────────────────────────
 
@@ -161,12 +174,12 @@ ensure_dependencies() {
     local optional_missing=()
 
     # Required dependencies
-    for cmd in curl jq tar gzip; do
+    for cmd in curl jq tar gzip python3 node base64 unzip; do
         command -v "$cmd" &>/dev/null || missing+=("$cmd")
     done
 
     # Optional but recommended
-    for cmd in python3 zip unzip base64; do
+    for cmd in zip; do
         command -v "$cmd" &>/dev/null || optional_missing+=("$cmd")
     done
 
@@ -194,7 +207,7 @@ ensure_dependencies() {
         echo -e "  \033[36mDetected package manager: $mgr\033[0m"
         echo -e "  \033[37mInstall missing dependencies now? (y/n)\033[0m"
         read -p "  > " dep_choice
-        if [[ "${dep_choice,,}" == "y" || "${dep_choice,,}" == "yes" ]]; then
+        if [[ "$dep_choice" =~ ^([yY]|[yY][eE][sS])$ ]]; then
             local all_deps=("${missing[@]}" "${optional_missing[@]}")
             for cmd in "${all_deps[@]}"; do
                 echo -e "  \033[90mInstalling $cmd...\033[0m"
@@ -211,7 +224,7 @@ ensure_dependencies() {
     fi
 
     # Re-check required deps
-    for cmd in curl jq tar gzip; do
+    for cmd in curl jq tar gzip python3 node base64 unzip; do
         if ! command -v "$cmd" &>/dev/null; then
             echo ""
             echo -e "  \033[31m$cmd is still missing. Some features may not work.\033[0m"
@@ -221,7 +234,7 @@ ensure_dependencies() {
     read -p "  Press Enter to continue..." _
 }
 
-ensure_dependencies
+[ "${MULTI_CLAUDE_LIBRARY_ONLY:-}" = 1 ] || ensure_dependencies
 
 # ─── ENSURE DIRECTORIES EXIST ────────────────────────────────────────────
 
@@ -232,6 +245,7 @@ mkdir -p "$ACCOUNTS_DIR" "$BACKUP_DIR"
 for _launcher in "$ACCOUNTS_DIR"/claude-*.sh; do
     [ -f "$_launcher" ] || continue
     _cmd=$(basename "$_launcher" .sh)
+    case "$_cmd" in claude-menu|claude-usage-report) continue ;; esac
     [ -L "$HOME/.local/bin/$_cmd" ] && continue
     register_launcher "$_cmd"
 done
@@ -270,6 +284,7 @@ get_accounts() {
         [ -f "$f" ] || continue
         local base=$(basename "$f" .sh)
         [ "$base" = "claude-menu" ] && continue
+        [ "$base" = "claude-usage-report" ] && continue
         files+=("$base")
     done
     echo "${files[@]}"
@@ -287,7 +302,12 @@ show_accounts() {
         local tag=""
         [ "$name" = "claude" ] && tag="  [default]"
         if [ -d "$configDir" ]; then
-            local lastUsed=$(date -r "$configDir" "+%d %b %Y %I:%M %p" 2>/dev/null || echo "unknown")
+            local lastUsed
+            if [ "$(uname -s)" = Darwin ]; then
+                lastUsed=$(date -r "$(stat -f%m "$configDir")" "+%d %b %Y %I:%M %p" 2>/dev/null || echo unknown)
+            else
+                lastUsed=$(date -r "$configDir" "+%d %b %Y %I:%M %p" 2>/dev/null || echo unknown)
+            fi
             echo "  $i. $name${tag}  [logged in]  (last used: $lastUsed)"
         else
             echo "  $i. $name${tag}  [not logged in]  (never used)"
@@ -676,15 +696,30 @@ rename_account() {
 
     read -p "  Enter new name for $selected: " newSuffix
     newSuffix=$(echo "$newSuffix" | tr '[:upper:]' '[:lower:]' | xargs)
+    if ! [[ "$newSuffix" =~ ^[a-z0-9_-]+$ ]]; then
+        echo 'Invalid name. Use letters, numbers, hyphens or underscores.'
+        return 1
+    fi
     local newName="claude-$newSuffix"
     local newSh="$ACCOUNTS_DIR/$newName.sh"
 
-    if [ -f "$newSh" ]; then
+    if [ -f "$newSh" ] || [ -e "$HOME/.$newName" ]; then
         echo -e "  \033[33mAccount '$newName' already exists!\033[0m"
         read -p "  Press Enter..." _
         return
     fi
 
+    # Preserve the config-scoped Keychain entry before changing its directory.
+    if [ "$(uname -s)" = Darwin ]; then
+        local renameCred=$(mktemp)
+        if ! credential_helper export "$HOME/.$selected" profile "$renameCred" ||
+           ! credential_helper import "$HOME/.$newName" profile "$renameCred"; then
+            rm -f "$renameCred"
+            echo 'Credentials could not be migrated; account was not renamed.'
+            return 1
+        fi
+        rm -f "$renameCred"
+    fi
     # Rename launcher
     mv "$ACCOUNTS_DIR/$selected.sh" "$newSh"
     sed -i "s/$selected/$newName/g" "$newSh" 2>/dev/null || sed -i '' "s/$selected/$newName/g" "$newSh"
@@ -698,6 +733,7 @@ rename_account() {
         mv "$oldConfig" "$newConfig"
     fi
 
+    credential_helper remove "$oldConfig" profile
     echo -e "  \033[32mRenamed $selected to $newName\033[0m"
     read -p "  Press Enter..." _
 }
@@ -729,12 +765,14 @@ delete_account() {
     echo -e "  \033[33mAccount selected for deletion: $selected\033[0m"
     read -p "  Type YES to confirm: " confirm
 
-    if [[ "${confirm,,}" != "yes" && "${confirm,,}" != "y" ]]; then
+    if ! [[ "$confirm" =~ ^([yY]|[yY][eE][sS])$ ]]; then
         echo -e "  \033[90mCancelled.\033[0m"
         read -p "  Press Enter..." _
         return
     fi
 
+    start_usage_report
+    credential_helper remove "$HOME/.$selected" profile
     rm -f "$ACCOUNTS_DIR/$selected.sh"
     unregister_launcher "$selected"
     local configDir="$HOME/.$selected"
@@ -833,17 +871,20 @@ build_export_token() {
     local credFile="$configDir/.credentials.json"
 
     [ -d "$configDir" ] || return 1
-    [ -f "$credFile" ] || return 1
 
     local tempDir=$(mktemp -d)
 
     local configDest="$tempDir/config"
     mkdir -p "$configDest"
 
-    for f in .credentials.json .claude.json settings.json CLAUDE.md mcp-needs-auth-cache.json; do
+    credential_helper export "$configDir" "$(credential_kind "$name")" "$configDest/.credentials.json" || { rm -rf "$tempDir"; return 1; }
+    for f in .claude.json settings.json CLAUDE.md mcp-needs-auth-cache.json; do
         [ -f "$configDir/$f" ] && cp "$configDir/$f" "$configDest/$f"
     done
 
+    if [ "$name" = claude ] && [ -f "$HOME/.claude.json" ]; then
+        cp "$HOME/.claude.json" "$configDest/.claude.json"
+    fi
     [ -d "$configDir/session-env" ] && cp -r "$configDir/session-env" "$configDest/session-env"
 
     if [ -d "$configDir/plugins" ]; then
@@ -860,26 +901,16 @@ build_export_token() {
     fi
     echo -n "$name" > "$tempDir/profile-name.txt"
 
-    local zipPath=$(mktemp)
-    (cd "$tempDir" && zip -qr "$zipPath" . 2>/dev/null) || {
-        python3 -c "
-import zipfile, os
-with zipfile.ZipFile('$zipPath', 'w', zipfile.ZIP_DEFLATED) as zf:
-    for root, dirs, files in os.walk('$tempDir'):
-        for f in files:
-            fp = os.path.join(root, f)
-            zf.write(fp, os.path.relpath(fp, '$tempDir'))
-"
-    }
-
-    local gzPath=$(mktemp)
-    gzip -c "$zipPath" > "$gzPath"
-    rm -f "$zipPath"
-
-    local b64=$(base64 -w0 "$gzPath" 2>/dev/null || base64 "$gzPath" 2>/dev/null)
+    local archiveDir=$(mktemp -d)
+    local zipPath="$archiveDir/account.zip" gzPath="$archiveDir/account.gz"
+    archive_helper create "$tempDir" "$zipPath" || {
+            rm -rf "$tempDir" "$archiveDir"; return 1;
+        }
+    gzip -c "$zipPath" > "$gzPath" || { rm -rf "$tempDir" "$archiveDir"; return 1; }
+    local b64=$(base64 < "$gzPath" | tr -d '\r\n')
     local token="CLAUDE_TOKEN_GZ:${b64}:END_TOKEN"
 
-    rm -rf "$tempDir" "$gzPath"
+    rm -rf "$tempDir" "$archiveDir"
     echo "$token"
 }
 
@@ -911,7 +942,7 @@ apply_import_token() {
     local tempDir=$(mktemp -d)
     local rawPath=$(mktemp)
 
-    echo "$b64" | base64 -d > "$rawPath" 2>/dev/null || {
+    echo "$b64" | base64_decode > "$rawPath" 2>/dev/null || {
         echo -e "  \033[31mFailed to decode token.\033[0m"
         rm -rf "$tempDir" "$rawPath"
         return 1
@@ -924,10 +955,10 @@ apply_import_token() {
             rm -rf "$tempDir" "$rawPath" "$zipPath"
             return 1
         }
-        (cd "$tempDir" && unzip -qo "$zipPath" 2>/dev/null)
+        archive_helper extract "$zipPath" "$tempDir" || { rm -rf "$tempDir" "$rawPath" "$zipPath"; return 1; }
         rm -f "$zipPath"
     else
-        tar -xzf "$rawPath" -C "$tempDir" 2>/dev/null || {
+        archive_helper extract "$rawPath" "$tempDir" || {
             echo -e "  \033[31mFailed to extract token.\033[0m"
             rm -rf "$tempDir" "$rawPath"
             return 1
@@ -941,12 +972,7 @@ apply_import_token() {
         rm -rf "$tempDir"
         return 1
     fi
-    local name=$(python3 -c "
-import sys
-data = open('$nameFile', 'rb').read()
-if data[:3] == b'\xef\xbb\xbf': data = data[3:]
-sys.stdout.write(data.decode('utf-8').strip())
-" 2>/dev/null || cat "$nameFile" | tr -d '\r\n')
+    local name=$(python3 -c 'import sys; print(open(sys.argv[1], encoding="utf-8-sig").read().strip())' "$nameFile")
 
     if ! echo "$name" | grep -qE '^[a-zA-Z0-9_-]+$'; then
         echo -e "  \033[31mInvalid profile name in token.\033[0m"
@@ -976,20 +1002,23 @@ sys.stdout.write(data.decode('utf-8').strip())
     fi
 
     mkdir -p "$configDir"
+    if [ -f "$importConfig/.credentials.json" ]; then
+        credential_helper import "$configDir" "$(credential_kind "$name")" "$importConfig/.credentials.json" || { rm -rf "$tempDir"; return 1; }
+        rm -f "$importConfig/.credentials.json"
+    fi
+    if [ "$name" = claude ] && [ -f "$importConfig/.claude.json" ]; then
+        cp "$importConfig/.claude.json" "$HOME/.claude.json"
+        rm -f "$importConfig/.claude.json"
+    fi
     cp -r "$importConfig"/. "$configDir/"
     echo -e "  \033[32mProfile restored (credentials, settings, session)\033[0m"
 
     # Skip launcher creation for the default "claude" account (it's the system default)
     if [ "$name" != "claude" ]; then
         mkdir -p "$ACCOUNTS_DIR"
-        if [ -f "$tempDir/launcher.sh" ]; then
-            cp "$tempDir/launcher.sh" "$ACCOUNTS_DIR/$name.sh"
-            chmod +x "$ACCOUNTS_DIR/$name.sh"
-        else
-            # Cross-platform: generate .sh from profile name if only .bat exists
-            printf '#!/bin/bash\nexport CLAUDE_CONFIG_DIR="$HOME/.%s"\nclaude "$@"\n' "$name" > "$ACCOUNTS_DIR/$name.sh"
-            chmod +x "$ACCOUNTS_DIR/$name.sh"
-        fi
+        # Generate a local launcher; sender paths and commands are not portable.
+        printf '#!/bin/bash\nexport CLAUDE_CONFIG_DIR="$HOME/.%s"\nclaude "$@"\n' "$name" > "$ACCOUNTS_DIR/$name.sh"
+        chmod +x "$ACCOUNTS_DIR/$name.sh"
         register_launcher "$name"
         echo -e "  \033[32mLauncher created\033[0m"
     fi
@@ -1085,7 +1114,7 @@ pair_export() {
     fi
 
     local reversed=$(echo -n "$raw" | rev)
-    local decoded=$(echo "$reversed" | base64 -d 2>/dev/null)
+    local decoded=$(echo "$reversed" | base64_decode 2>/dev/null)
 
     if [ -z "$decoded" ]; then
         echo -e "  \033[31mFailed to decode pairing script.\033[0m"
@@ -1112,7 +1141,7 @@ pair_import() {
     fi
 
     local reversed=$(echo -n "$raw" | rev)
-    local decoded=$(echo "$reversed" | base64 -d 2>/dev/null)
+    local decoded=$(echo "$reversed" | base64_decode 2>/dev/null)
 
     if [ -z "$decoded" ]; then
         echo -e "  \033[31mFailed to decode pairing script.\033[0m"
@@ -1134,7 +1163,7 @@ fetch_and_run() {
         return
     fi
     local reversed=$(echo -n "$raw" | rev)
-    local decoded=$(echo "$reversed" | base64 -d 2>/dev/null)
+    local decoded=$(echo "$reversed" | base64_decode 2>/dev/null)
     if [ -z "$decoded" ]; then
         echo -e "  \033[31mFailed to decode script.\033[0m"
         read -p "  Press Enter..." _
@@ -1597,6 +1626,9 @@ show_help() {
 }
 
 
+# Function-only loading supports isolated platform integration tests.
+[ "${MULTI_CLAUDE_LIBRARY_ONLY:-}" != 1 ] || return 0
+
 # Resolve this menu through npm/Homebrew/user symlinks.
 _usage_source=${BASH_SOURCE[0]}
 while [ -L "$_usage_source" ]; do _usage_base=$(cd -P "$(dirname "$_usage_source")" && pwd); _usage_source=$(readlink "$_usage_source"); [[ $_usage_source != /* ]] && _usage_source="$_usage_base/$_usage_source"; done
@@ -1619,7 +1651,7 @@ if [ -f "$USAGE_REPORTER" ]; then bash "$USAGE_REPORTER" --install; fi
 while true; do
     [ ! -f "$HOME/claude-accounts/usage/install.js" ] || node --disable-warning=ExperimentalWarning "$HOME/claude-accounts/usage/install.js" 2>/dev/null
     show_menu
-    read -p "  Pick an option: " choice
+    read -r -p "  Pick an option: " choice || break
     case "$choice" in
         1)    show_header; echo -e "\033[36mAll Accounts:\033[0m"; echo ""; show_accounts; echo ""; read -p "  Press Enter..." _ ;;
         2)    create_account ;;

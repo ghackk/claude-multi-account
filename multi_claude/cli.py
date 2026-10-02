@@ -20,13 +20,13 @@ def ensure_installed():
                 capture_output=True,
             )
         except Exception:
-            pass  # Offline or timeout — run with existing version
+            pass  # Offline or timeout â€” run with existing version
         return
 
     if os.path.isdir(os.path.join(INSTALL_DIR, "unix")):
         return  # Downloaded via archive, no git
 
-    print("First run — downloading claude-multi-account...")
+    print("First run â€” downloading claude-multi-account...")
     try:
         subprocess.run(["git", "clone", "--quiet", REPO, INSTALL_DIR], check=True)
         print("Downloaded!")
@@ -47,7 +47,7 @@ def _find_scripts_dirs():
     if sys.argv[0]:
         dirs.add(os.path.dirname(os.path.abspath(sys.argv[0])))
 
-    # 2. sysconfig schemes — covers standard, user, venv installs
+    # 2. sysconfig schemes â€” covers standard, user, venv installs
     for scheme in sysconfig.get_scheme_names():
         try:
             d = sysconfig.get_path("scripts", scheme)
@@ -56,7 +56,7 @@ def _find_scripts_dirs():
         except (KeyError, AttributeError):
             pass
 
-    # 3. User scripts dir (pip install --user) — works for all Python installs
+    # 3. User scripts dir (pip install --user) â€” works for all Python installs
     try:
         dirs.add(sysconfig.get_path("scripts", f"{os.name}_user"))
     except (KeyError, AttributeError):
@@ -65,7 +65,7 @@ def _find_scripts_dirs():
     # 4. Same dir as python executable (some embeddable/store installs)
     dirs.add(os.path.dirname(sys.executable))
 
-    # 5. site.getusersitepackages() → swap site-packages for Scripts/bin
+    # 5. site.getusersitepackages() â†’ swap site-packages for Scripts/bin
     try:
         import site
         user_site = site.getusersitepackages()
@@ -114,7 +114,7 @@ def ensure_path():
 
         new_path = ";".join(missing) + ";" + user_path if user_path else ";".join(missing)
         try:
-            # Escape for PowerShell — single quotes to avoid variable expansion
+            # Escape for PowerShell â€” single quotes to avoid variable expansion
             escaped = new_path.replace("'", "''")
             subprocess.run(
                 ["powershell", "-Command",
@@ -137,21 +137,21 @@ def ensure_path():
         if not all_missing:
             return
 
-        line = 'export PATH="$HOME/.local/bin:$PATH"'
+        import shlex
         home = pathlib.Path.home()
-        added = False
-        for rc in [home / ".bashrc", home / ".zshrc"]:
+        preferred = home / (".zshrc" if platform.system() == "Darwin" or os.environ.get("SHELL", "").endswith("/zsh") else ".bashrc")
+        preferred.touch(exist_ok=True)
+        for rc in {preferred, home / ".bashrc", home / ".zshrc"}:
             if not rc.exists():
                 continue
             contents = rc.read_text()
-            if ".local/bin" in contents:
-                continue
-            with open(rc, "a") as f:
-                f.write(f"\n# Added by multi-claude\n{line}\n")
-            added = True
+            lines = ["export PATH=" + shlex.quote(d) + ':"$PATH"' for d in sorted(all_missing)]
+            new_lines = [line for line in lines if line not in contents]
+            if new_lines:
+                with rc.open("a") as f:
+                    f.write("\n# Added by multi-claude\n" + "\n".join(new_lines) + "\n")
+        os.environ["PATH"] = os.pathsep.join(sorted(all_missing) + current_path)
 
-        if added:
-            print(f"Added ~/.local/bin to PATH in shell config. Restart your terminal for the change to take effect.")
 
 
 def main():
