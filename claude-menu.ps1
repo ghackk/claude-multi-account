@@ -1,4 +1,4 @@
-﻿$ACCOUNTS_DIR             = "$HOME\claude-accounts"
+﻿﻿$ACCOUNTS_DIR             = "$HOME\claude-accounts"
 $BACKUP_DIR               = "$HOME\claude-backups"
 $SHARED_DIR               = "$HOME\claude-shared"
 $SHARED_SETTINGS          = "$SHARED_DIR\settings.json"
@@ -169,6 +169,28 @@ if ($userPath -notlike "*claude-accounts*") {
     [Environment]::SetEnvironmentVariable("PATH", "$ACCOUNTS_DIR;$userPath", "User")
     $env:PATH = "$ACCOUNTS_DIR;$env:PATH"
 }
+
+
+# Usage reporting is installed from this package; failures never prevent account management.
+$UsageReporter = Join-Path $PSScriptRoot 'claude-usage-report.ps1'
+function Start-UsageReport { if (Test-Path $UsageReporter) { & $UsageReporter -Background } }
+function Get-UsageMetadata($accountName = '') {
+    try {
+        $raw = & node --disable-warning=ExperimentalWarning "$HOME\claude-accounts\usage\report.js" metadata $accountName 2>$null
+        if ($LASTEXITCODE -eq 0) { return ($raw | ConvertFrom-Json) }
+    } catch {}
+    return @{ device = $null; accounts = @() }
+}
+function Show-UsageMenu {
+    Write-Host 'Usage: D dashboard | E enable reporting | X disable reporting | M merge another usage.db'
+    switch ((Read-Host 'Pick an option').ToLower()) {
+        'd' { & $UsageReporter -Dashboard }
+        'e' { & $UsageReporter -Enable }
+        'x' { & $UsageReporter -Disable }
+        'm' { $usageSource = Read-Host 'Path to another usage.db'; & node --disable-warning=ExperimentalWarning "$HOME\claude-accounts\usage\report.js" merge $usageSource }
+    }
+}
+if (Test-Path $UsageReporter) { try { & $UsageReporter -Install } catch { Write-Warning "Usage reporter setup: $($_.Exception.Message)" } }
 
 # ─── DISPLAY ─────────────────────────────────────────────────────────────────
 
@@ -567,6 +589,8 @@ function Create-Account {
     $content = "@echo off`r`nset CLAUDE_CONFIG_DIR=%USERPROFILE%\.claude-$name`r`nclaude %*"
     [System.IO.File]::WriteAllText($batFile, $content, [System.Text.Encoding]::ASCII)
 
+    & node --disable-warning=ExperimentalWarning "$HOME\claude-accounts\usage\install.js" 2>$null
+
     # Auto-apply shared settings to brand new account
     Merge-SharedIntoAccount "claude-$name"
     Write-Host "  Shared settings applied automatically." -ForegroundColor Gray
@@ -594,7 +618,9 @@ function Launch-Account {
         Merge-SharedIntoAccount $acc.Name
         Write-Host "  Launching $($acc.Name)..." -ForegroundColor Cyan
         if ($acc.IsDefault) {
+            Start-UsageReport
             claude
+            Start-UsageReport
         } else {
             & $acc.BatFile
         }
@@ -1652,6 +1678,7 @@ function Show-Menu {
     Write-Host "  9. Remote Session Restore           " -ForegroundColor Green
     Write-Host "  E. Send Account (Pair Code)          " -ForegroundColor Green
     Write-Host "  I. Receive Account (Pair Code)       " -ForegroundColor Green
+    Write-Host "  U. Usage Dashboard & Reporting       " -ForegroundColor Cyan
     Write-Host "  H. Help                              " -ForegroundColor Gray
     Write-Host "  0. Exit                              " -ForegroundColor Red
     Write-Host "======================================" -ForegroundColor Cyan
@@ -1659,6 +1686,7 @@ function Show-Menu {
 }
 
 while ($true) {
+    if (Test-Path "$HOME\claude-accounts\usage\install.js") { & node --disable-warning=ExperimentalWarning "$HOME\claude-accounts\usage\install.js" 2>$null }
     Show-Menu
     $choice = Read-Host "  Pick an option"
     switch ($choice) {
@@ -1672,11 +1700,9 @@ while ($true) {
         "8" { Cloud-Backup }
         "9" { Cloud-Restore }
         "e" { Pair-Export }
-        "E" { Pair-Export }
         "i" { Pair-Import }
-        "I" { Pair-Import }
+        "u" { Show-UsageMenu }
         "h" { Show-Help }
-        "H" { Show-Help }
         "0" { Clear-Host; Write-Host "Bye!" -ForegroundColor Red; break }
         default { Write-Host "  Invalid option." -ForegroundColor Red; Start-Sleep 1 }
     }

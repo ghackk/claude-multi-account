@@ -601,6 +601,7 @@ claude "\$@"
 ENDSH
     chmod +x "$shFile"
     register_launcher "claude-$name"
+    node --disable-warning=ExperimentalWarning "$HOME/claude-accounts/usage/install.js" 2>/dev/null
 
     # Auto-apply shared settings
     if command -v jq &>/dev/null; then
@@ -642,7 +643,9 @@ launch_account() {
     fi
     echo -e "  \033[36mLaunching $selected...\033[0m"
     if [ "$selected" = "claude" ]; then
+        start_usage_report
         claude
+        start_usage_report
     else
         bash "$ACCOUNTS_DIR/$selected.sh"
     fi
@@ -1555,6 +1558,7 @@ show_menu() {
     echo -e "  \033[32m9. Remote Session Restore\033[0m"
     echo -e "  \033[32mE. Send Account (Pair Code)\033[0m"
     echo -e "  \033[32mI. Receive Account (Pair Code)\033[0m"
+    echo "  U. Usage Dashboard & Reporting"
     echo -e "  \033[90mH. Help\033[0m"
     echo -e "  \033[31m0. Exit\033[0m"
     echo -e "\033[36m======================================\033[0m"
@@ -1592,7 +1596,28 @@ show_help() {
     read -p "  Press Enter..." _
 }
 
+
+# Resolve this menu through npm/Homebrew/user symlinks.
+_usage_source=${BASH_SOURCE[0]}
+while [ -L "$_usage_source" ]; do _usage_base=$(cd -P "$(dirname "$_usage_source")" && pwd); _usage_source=$(readlink "$_usage_source"); [[ $_usage_source != /* ]] && _usage_source="$_usage_base/$_usage_source"; done
+USAGE_REPORTER="$(cd -P "$(dirname "$_usage_source")/.." && pwd)/claude-usage-report.sh"
+start_usage_report() { [ ! -f "$USAGE_REPORTER" ] || bash "$USAGE_REPORTER" --background; }
+usage_metadata() { node --disable-warning=ExperimentalWarning "$HOME/claude-accounts/usage/report.js" metadata "${1:-}" 2>/dev/null || printf '{"accounts":[]}'; }
+show_usage_menu() {
+    echo 'Usage: D dashboard | E enable reporting | X disable reporting | M merge another usage.db'
+    local usage_choice usage_source
+    read -r -p 'Pick an option: ' usage_choice
+    case "$usage_choice" in
+      [dD]) bash "$USAGE_REPORTER" --dashboard ;;
+      [eE]) bash "$USAGE_REPORTER" --enable ;;
+      [xX]) bash "$USAGE_REPORTER" --disable ;;
+      [mM]) read -r -p 'Path to another usage.db: ' usage_source; node --disable-warning=ExperimentalWarning "$HOME/claude-accounts/usage/report.js" merge "$usage_source" ;;
+    esac
+}
+if [ -f "$USAGE_REPORTER" ]; then bash "$USAGE_REPORTER" --install; fi
+
 while true; do
+    [ ! -f "$HOME/claude-accounts/usage/install.js" ] || node --disable-warning=ExperimentalWarning "$HOME/claude-accounts/usage/install.js" 2>/dev/null
     show_menu
     read -p "  Pick an option: " choice
     case "$choice" in
@@ -1607,6 +1632,7 @@ while true; do
         9)    cloud_restore ;;
         [eE]) pair_export ;;
         [iI]) pair_import ;;
+        [uU]) show_usage_menu ;;
         [hH]) show_help ;;
         0)    clear; echo -e "\033[36mBye!\033[0m"; break ;;
         *)    echo -e "  \033[31mInvalid option.\033[0m"; sleep 1 ;;

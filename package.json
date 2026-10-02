@@ -1,9 +1,10 @@
 {
   "name": "@ghackk/multi-claude",
-  "version": "1.0.25",
+  "version": "1.0.26",
   "description": "Run multiple Claude CLI accounts with shared settings, plugins, marketplace sync, and backup/restore",
   "scripts": {
-    "postinstall": "node bin/postinstall.js"
+    "postinstall": "node bin/postinstall.js",
+    "test": "node --test usage/test.js"
   },
   "bin": {
     "multi-claude": "bin/claude-multi.js"
@@ -15,7 +16,10 @@
     "unix/",
     "windows/",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "usage/",
+    "claude-usage-report.ps1",
+    "claude-usage-report.sh"
   ],
   "repository": {
     "type": "git",
@@ -32,5 +36,8 @@
   ],
   "author": "Gyanesh Kumar (ghackk)",
   "license": "MIT",
-  "homepage": "https://github.com/ghackk/claude-multi-account"
+  "homepage": "https://github.com/ghackk/claude-multi-account",
+  "engines": {
+    "node": ">=22.13"
+  }
 }
