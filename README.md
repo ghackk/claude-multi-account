@@ -20,6 +20,20 @@
 
 ## Why?
 
+### Automatic application updates (v1.0.29 working branch)
+
+Each menu launch starts a nonblocking check of `https://pair.ghackk.com/updates/stable.json`. If the server is unavailable, the updater checks the signed `stable.json` asset on the latest GitHub release. The application keeps running while the check happens. Failed checks back off for 15 minutes; offline operation uses the last working installation.
+
+The manifest is signed with a pinned Ed25519 key and contains a version, expiry, Node requirement, exact archive size and SHA-256 hash. Downloads try the server-hosted archive, then the GitHub release archive. On Windows the transport fallbacks are Node HTTPS, curl, then PowerShell; macOS/Linux use Node HTTPS then curl. All paths require HTTPS. Invalid signatures, expired manifests, corrupt archives and downgrades are rejected.
+
+Updates install application files into `~/.multi-claude-updates/versions/`, then atomically switch the selected version after validation. The next menu launch uses that version. The prior installed package and cached version remain available if a cached release is incomplete. Account profiles, credentials, backups and usage history are never part of the update directory. No administrator access, package-manager switching or lifecycle scripts are needed.
+
+This updates the **running application**, not npm/pip/Homebrew/Scoop's installed-version records. `multi-claude --version` reports the selected application version. `multi-claude --update-status` shows the base version, selected version and last result; `multi-claude --update-now` waits for a check. Set `MULTI_CLAUDE_AUTO_UPDATE=0` to disable background checks. Explicit checks remain available.
+
+Versions before 1.0.29 need a one-time upgrade to obtain this updater. A source Git checkout is no longer silently pulled by the pip launcher; application updates follow the signed release feed.
+
+Maintainers publish a normal `npm pack --ignore-scripts` archive as a GitHub release asset. The release helper `local-usage/publish-channels.py VERSION` also calls `local-usage/publish-update-feed.py VERSION`, uploading the archive to the server, checking its hash remotely, atomically activating the manifest, and mirroring the signed manifest on GitHub. Signing credentials stay outside the public repository. Existing versioned archives are immutable. Renew the manifest before its 89-day expiry if no new release is made; clients remain usable offline after expiry.
+
 <div align="center">
 <img src="images/12-before-after.png" alt="Before vs After" width="700">
 </div>

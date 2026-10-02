@@ -18,6 +18,14 @@ while [ -L "$_menu_source" ]; do
     [[ $_menu_source != /* ]] && _menu_source="$_menu_base/$_menu_source"
 done
 MENU_ROOT=$(cd -P "$(dirname "$_menu_source")/.." && pwd)
+# Updates are checked in the background; cached releases are used without network waits.
+if [ "${MULTI_CLAUDE_LIBRARY_ONLY:-}" != 1 ] && [ "${MULTI_CLAUDE_UPDATE_BOOTSTRAPPED:-}" != 1 ] && command -v node >/dev/null 2>&1; then
+    _update_root=$(node "$MENU_ROOT/updater/update.js" resolve "$MENU_ROOT" 2>/dev/null) || _update_root="$MENU_ROOT"
+    export MULTI_CLAUDE_UPDATE_BOOTSTRAPPED=1
+    if [ -n "$_update_root" ] && [ "$_update_root" != "$MENU_ROOT" ] && [ -f "$_update_root/unix/claude-menu.sh" ]; then
+        exec /bin/bash "$_update_root/unix/claude-menu.sh" "$@"
+    fi
+fi
 credential_helper() { node "$MENU_ROOT/usage/credentials.js" "$@"; }
 credential_kind() { [ "$1" = claude ] && printf default || printf profile; }
 archive_helper() { python3 "$MENU_ROOT/unix/archive.py" "$@"; }

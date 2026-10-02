@@ -12,15 +12,7 @@ INSTALL_DIR = os.path.join(os.path.expanduser("~"), "claude-multi-account")
 def ensure_installed():
     """Clone the repo on first run, pull updates if already present."""
     if os.path.isdir(os.path.join(INSTALL_DIR, ".git")):
-        # Auto-update on each run (silent, non-blocking)
-        try:
-            subprocess.run(
-                ["git", "-C", INSTALL_DIR, "pull", "--quiet"],
-                timeout=10,
-                capture_output=True,
-            )
-        except Exception:
-            pass  # Offline or timeout â€” run with existing version
+        # Application updates are handled by the signed updater.
         return
 
     if os.path.isdir(os.path.join(INSTALL_DIR, "unix")):
@@ -157,6 +149,12 @@ def ensure_path():
 def main():
     ensure_installed()
     ensure_path()
+    import shutil
+    node = shutil.which("node")
+    bootstrap = os.path.join(INSTALL_DIR, "bin", "claude-multi.js")
+    if node and os.path.isfile(os.path.join(INSTALL_DIR, "updater", "update.js")):
+        result = subprocess.run([node, bootstrap] + sys.argv[1:])
+        sys.exit(result.returncode)
 
     if platform.system() == "Windows":
         script = os.path.join(INSTALL_DIR, "claude-menu.ps1")

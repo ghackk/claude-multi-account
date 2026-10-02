@@ -1,4 +1,13 @@
-﻿﻿$ACCOUNTS_DIR             = "$HOME\claude-accounts"
+﻿# Bootstrap only application files; user profiles and history are outside the update directory.
+if ($env:MULTI_CLAUDE_LIBRARY_ONLY -ne '1' -and $env:MULTI_CLAUDE_UPDATE_BOOTSTRAPPED -ne '1' -and (Get-Command node -ErrorAction SilentlyContinue)) {
+    $updateRoot = & node (Join-Path $PSScriptRoot 'updater\update.js') resolve $PSScriptRoot 2>$null
+    $env:MULTI_CLAUDE_UPDATE_BOOTSTRAPPED = '1'
+    if ($LASTEXITCODE -eq 0 -and $updateRoot -and $updateRoot -ne $PSScriptRoot -and (Test-Path -LiteralPath (Join-Path $updateRoot 'claude-menu.ps1'))) {
+        & (Join-Path $updateRoot 'claude-menu.ps1') @args
+        return
+    }
+}
+﻿$ACCOUNTS_DIR             = "$HOME\claude-accounts"
 $BACKUP_DIR               = "$HOME\claude-backups"
 $SHARED_DIR               = "$HOME\claude-shared"
 $SHARED_SETTINGS          = "$SHARED_DIR\settings.json"

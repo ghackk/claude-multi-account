@@ -1,9 +1,9 @@
 {
   "name": "@ghackk/multi-claude",
-  "version": "1.0.28",
+  "version": "1.0.29",
   "description": "Run multiple Claude CLI accounts with shared settings, plugins, marketplace sync, and backup/restore",
   "scripts": {
-    "test": "node --test usage/test.js usage/platform.test.js usage/device-history.test.js"
+    "test": "node --test usage/test.js usage/platform.test.js usage/device-history.test.js updater/update.test.js"
   },
   "bin": {
     "multi-claude": "bin/claude-multi.js"
@@ -18,7 +18,8 @@
     "README.md",
     "usage/",
     "claude-usage-report.ps1",
-    "claude-usage-report.sh"
+    "claude-usage-report.sh",
+    "updater/"
   ],
   "repository": {
     "type": "git",

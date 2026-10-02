@@ -7,6 +7,9 @@ if [ "$SOURCE_ROOT" != "$INSTALL_ROOT" ]; then
     cp "$SOURCE_ROOT/unix/claude-menu.sh" "$SOURCE_ROOT/unix/archive.py" "$INSTALL_ROOT/unix/"
     cp "$SOURCE_ROOT"/claude-usage-report.* "$INSTALL_ROOT/"
     cp "$SOURCE_ROOT/usage/"* "$INSTALL_ROOT/usage/"
+    mkdir -p "$INSTALL_ROOT/updater"
+    cp "$SOURCE_ROOT/updater/"* "$INSTALL_ROOT/updater/"
+    cp "$SOURCE_ROOT/package.json" "$INSTALL_ROOT/"
 fi
 chmod +x "$INSTALL_ROOT/unix/claude-menu.sh"
 mkdir -p "$HOME/.local/bin"

@@ -3,10 +3,21 @@ const { spawnSync } = require('child_process');
 const path = require('path');
 const os = require('os');
 
-const rootDir = path.resolve(__dirname, '..');
+let rootDir = path.resolve(__dirname, '..');
+const updater = require('../updater/update');
+if (process.argv.includes('--update-now') || process.argv.includes('--update-status')) {
+    const mode = process.argv.includes('--update-now') ? 'check' : 'status';
+    const result = spawnSync(process.execPath, [path.join(rootDir, 'updater/update.js'), mode], {stdio:'inherit'});
+    process.exit(result.status ?? 1);
+}
+if (process.env.MULTI_CLAUDE_UPDATE_BOOTSTRAPPED !== '1') {
+    if (!process.argv.includes('--version')) updater.start(rootDir);
+    rootDir = updater.current(rootDir);
+}
+process.env.MULTI_CLAUDE_UPDATE_BOOTSTRAPPED = '1';
 
 if (process.argv.includes('--version')) {
-    console.log(require('../package.json').version);
+    console.log(require(path.join(rootDir, 'package.json')).version);
     process.exit(0);
 }
 const windows = os.platform() === 'win32';
