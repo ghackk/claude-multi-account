@@ -808,6 +808,9 @@ function Build-ExportToken($name) {
         if (Test-Path $src) { Copy-Item $src "$configDest\$f" -Force }
     }
 
+    if ($name -eq "claude" -and (Test-Path "$HOME\.claude.json")) {
+        Copy-Item -LiteralPath "$HOME\.claude.json" -Destination "$configDest\.claude.json" -Force
+    }
     if (Test-Path "$configDir\session-env") {
         Copy-Item "$configDir\session-env" "$configDest\session-env" -Recurse -Force
     }
@@ -915,6 +918,12 @@ function Apply-ImportToken($token) {
         $nameRaw = $nameRaw[3..($nameRaw.Length-1)]
     }
     $name = [System.Text.Encoding]::UTF8.GetString($nameRaw).Trim()
+    if ($name -notmatch '^[a-zA-Z0-9_-]+$') {
+        Write-Host "Invalid profile name in token." -ForegroundColor Red
+        Remove-Item -LiteralPath $extractDir -Recurse -Force
+        Remove-Item -LiteralPath $zipPath -Force
+        return $false
+    }
 
     Write-Host ""
     Write-Host "  Detected profile: $name" -ForegroundColor Cyan
@@ -945,6 +954,10 @@ function Apply-ImportToken($token) {
 
     if (!(Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir | Out-Null }
 
+    if ($name -eq "claude" -and (Test-Path "$importConfig\.claude.json")) {
+        Copy-Item -LiteralPath "$importConfig\.claude.json" -Destination "$HOME\.claude.json" -Force
+        Remove-Item -LiteralPath "$importConfig\.claude.json" -Force
+    }
     Get-ChildItem $importConfig -Force | ForEach-Object {
         Copy-Item $_.FullName "$configDir\$($_.Name)" -Recurse -Force
     }

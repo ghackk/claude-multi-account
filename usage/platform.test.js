@@ -5,6 +5,11 @@ const fs=require('fs'),os=require('os'),path=require('path');
 const {spawnSync,execFileSync}=require('child_process');
 const C=require('./credentials');
 const root=path.resolve(__dirname,'..');
+test('Windows default-account transfer preserves root email metadata',{skip:process.platform!=='win32'},()=>{
+  const fixture=fs.mkdtempSync(path.join(os.tmpdir(),'multi-claude-windows-'));
+  try { run('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(__dirname,'windows-transfer.test.ps1'),'-FixtureHome',fixture]); }
+  finally {fs.rmSync(fixture,{recursive:true,force:true});}
+});
 function run(command,args,options={}) {
   const r=spawnSync(command,args,{encoding:'utf8',timeout:60000,...options});
   assert.equal(r.status,0,r.stdout+'\n'+r.stderr+'\n'+(r.error||''));
@@ -125,4 +130,22 @@ test('legacy installer includes companion files and configures a fresh shell',{s
     for(const file of ['usage/credentials.js','usage/schedule.js','unix/archive.py','claude-usage-report.sh'])assert.ok(fs.existsSync(path.join(home,'claude-multi-account',file)),file);
     assert.ok(fs.lstatSync(path.join(home,'.local/bin/multi-claude')).isSymbolicLink());
   } finally{fs.rmSync(home,{recursive:true,force:true});}
+});
+test('pip startup persists its actual Scripts directory in a fresh shell',{skip:process.platform==='win32'},()=>{
+  const home=fs.mkdtempSync(path.join(os.tmpdir(),"multi-claude pip's test-"));
+  try {
+    run('python3',['-c',String.raw`
+import os, pathlib, sys
+sys.path.insert(0, os.environ['PACKAGE_ROOT'])
+from multi_claude import cli
+scripts = pathlib.Path.home() / 'Library/Python/3.12/bin'
+scripts.mkdir(parents=True)
+cli._find_scripts_dirs = lambda: {str(scripts)}
+os.environ['PATH'] = '/usr/bin:/bin'
+cli.ensure_path()
+rc = pathlib.Path.home() / ('.zshrc' if sys.platform == 'darwin' else '.bashrc')
+assert 'Library/Python/3.12/bin' in rc.read_text()
+assert str(scripts) in os.environ['PATH'].split(':')
+`],{env:{...process.env,HOME:home,PACKAGE_ROOT:root,SHELL:'/bin/bash'}});
+  } finally {fs.rmSync(home,{recursive:true,force:true});}
 });
