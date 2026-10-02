@@ -53,7 +53,7 @@ start_usage_report() { :; }
 credential_helper() {
     case "$1" in
       export) cp "$2/.credentials.json" "$4" ;;
-      import) mkdir -p "$2"; cp "$4" "$2/.credentials.json" ;;
+      import) if [ -d "$2" ]; then cp "$4" "$2/.credentials.json"; fi ;;
       remove) : ;;
     esac
 }
@@ -71,6 +71,7 @@ pick_account() { echo claude-alpha; }
 rename_account <<<'beta
 '
 test -d "$HOME/.claude-beta" || exit 1
+grep -q same@example.com "$HOME/.claude-beta/.claude.json" || exit 1
 test ! -e "$HOME/.claude-alpha" || exit 1
 test -x "$ACCOUNTS_DIR/claude-beta.sh" || exit 1
 token=$(build_export_token claude-beta) || exit 1
@@ -96,4 +97,32 @@ echo 'Menu round-trip passed'
 `;
     run('/bin/bash',['-c',script],{env:{...process.env,HOME:fixture,CLAUDE_USAGE_HOME:fixture,CLAUDE_CONFIG_DIR:'',PACKAGE_ROOT:root,FIXTURE_BIN:path.join(fixture,'bin'),PATH:path.dirname(process.execPath)+':'+process.env.PATH}});
   } finally {fs.rmSync(fixture,{recursive:true,force:true});}
+});
+test('macOS LaunchAgent plist and real CI scheduling',{skip:process.platform!=='darwin'},async()=>{
+  const {plist,schedule}=require('./schedule');
+  const fixture=fs.mkdtempSync(path.join(os.tmpdir(),"multi-claude agent's & test-"));
+  const file=path.join(fixture,'agent.plist');
+  fs.writeFileSync(file,plist(fixture,process.execPath));
+  run('/usr/bin/plutil',['-lint',file]);
+  try {
+    if(process.env.CI==='true') {
+      const script=path.join(fixture,'claude-accounts','usage','report.js');
+      const marker=path.join(fixture,'ran');
+      fs.mkdirSync(path.dirname(script),{recursive:true});
+      fs.writeFileSync(script,`require('fs').writeFileSync(${JSON.stringify(marker)},'ok')`);
+      schedule(true,fixture);
+      for(let i=0;i<30&&!fs.existsSync(marker);i++)await new Promise(r=>setTimeout(r,500));
+      assert.equal(fs.readFileSync(marker,'utf8'),'ok');
+      schedule(false,fixture);
+      assert.equal(fs.existsSync(path.join(fixture,'Library/LaunchAgents/com.ghackk.multi-claude.usage.plist')),false);
+    }
+  } finally {if(process.env.CI==='true')schedule(false,fixture);fs.rmSync(fixture,{recursive:true,force:true});}
+});
+test('legacy installer includes companion files and configures a fresh shell',{skip:process.platform==='win32'},()=>{
+  const home=fs.mkdtempSync(path.join(os.tmpdir(),'multi-claude-install-'));
+  try {
+    run('/bin/bash',[path.join(root,'unix/install.sh')],{env:{...process.env,HOME:home,CLAUDE_USAGE_HOME:home,MULTI_CLAUDE_NO_REPORT:'1'}});
+    for(const file of ['usage/credentials.js','usage/schedule.js','unix/archive.py','claude-usage-report.sh'])assert.ok(fs.existsSync(path.join(home,'claude-multi-account',file)),file);
+    assert.ok(fs.lstatSync(path.join(home,'.local/bin/multi-claude')).isSymbolicLink());
+  } finally{fs.rmSync(home,{recursive:true,force:true});}
 });

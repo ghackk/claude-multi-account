@@ -4,10 +4,17 @@ while [ -L "$SOURCE" ]; do BASE=$(cd -P "$(dirname "$SOURCE")" && pwd); SOURCE=$
 REPORT_ROOT=$(cd -P "$(dirname "$SOURCE")" && pwd)
 command -v node >/dev/null 2>&1 || { [ "${1:-}" = --install ] && echo 'Usage history needs Node.js 22.13 or newer.' >&2; exit 0; }
 REPORT_NODE=$(command -v node)
+"$REPORT_NODE" -e 'const [a,b]=process.versions.node.split(".").map(Number); process.exit(a>22 || (a===22 && b>=13) ? 0 : 1)' || {
+    echo 'Usage history needs Node.js 22.13 or newer. Upgrade Node.js and reopen multi-claude.' >&2; exit 1;
+}
 case "${1:-}" in
   --install)
     "$REPORT_NODE" --disable-warning=ExperimentalWarning "$REPORT_ROOT/usage/install.js" || exit 1
-    if command -v crontab >/dev/null 2>&1; then
+    if [ "$(uname -s)" = Darwin ]; then
+      if [ ! -f "$HOME/claude-usage-history/reporting-disabled" ]; then
+        "$REPORT_NODE" "$REPORT_ROOT/usage/schedule.js" enable || exit 1
+      fi
+    elif command -v crontab >/dev/null 2>&1; then
       # Keep unrelated cron entries and the Node path (cron has a minimal PATH).
       REPORT_CRON=$(mktemp)
       crontab -l 2>/dev/null | sed '/# multi-claude-usage$/d' > "$REPORT_CRON"
@@ -22,7 +29,9 @@ case "${1:-}" in
     bash "$HOME/claude-accounts/claude-usage-report.sh" --background ;;
   --disable)
     "$REPORT_NODE" --disable-warning=ExperimentalWarning "$REPORT_ROOT/usage/report.js" disable
-    if command -v crontab >/dev/null 2>&1; then (crontab -l 2>/dev/null | sed '/# multi-claude-usage$/d') | crontab -; fi ;;
+    if [ "$(uname -s)" = Darwin ]; then
+      "$REPORT_NODE" "$REPORT_ROOT/usage/schedule.js" disable
+    elif command -v crontab >/dev/null 2>&1; then (crontab -l 2>/dev/null | sed '/# multi-claude-usage$/d') | crontab -; fi ;;
   --enable)
     "$REPORT_NODE" --disable-warning=ExperimentalWarning "$REPORT_ROOT/usage/report.js" enable
     bash "$REPORT_ROOT/claude-usage-report.sh" --install ;;

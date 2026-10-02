@@ -10,7 +10,7 @@
 
 2. **Platform-specific requirements:**
    - **Windows**: PowerShell 5.1+ (included with Windows 10/11)
-   - **Linux/macOS**: Bash 4+, `jq` (for JSON merging)
+   - **Linux/macOS**: Bash 3.2+, `jq` (for JSON merging), Python 3, Node.js 22.13+ for usage history. macOS's system Bash is supported.
 
 ## Windows Installation
 

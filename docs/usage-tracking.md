@@ -2,7 +2,7 @@
 
 The account menu installs a local SQLite history and a background reporter. Node.js 22.13 or newer is required for `node:sqlite`. The account manager still works if reporting cannot start.
 
-Choose **U** in either menu for the local dashboard, enable/disable controls, or merging another PC's `usage.db`. Windows uses the hidden **Claude usage history** task; Unix uses a marked cron entry. Both run every 30 minutes. Launchers and Claude SessionStart/SessionEnd hooks also trigger background sweeps. Disabling reporting persists across menu restarts. `MULTI_CLAUDE_NO_REPORT=1` disables an invocation; the menu's disable control also disables the scheduled task/cron entry.
+Choose **U** in either menu for the local dashboard, enable/disable controls, or merging another PC's `usage.db`. Windows uses the hidden **Claude usage history** task, macOS uses the **com.ghackk.multi-claude.usage** LaunchAgent, and Linux uses a marked cron entry. They run every 30 minutes. Launchers and Claude SessionStart/SessionEnd hooks also trigger background sweeps. Disabling reporting persists across menu restarts. `MULTI_CLAUDE_NO_REPORT=1` disables a launcher invocation; the menu's disable control also disables scheduled reporting.
 
 History is retained at `~/claude-usage-history/usage.db`, outside profile directories. Reporter files are installed into `~/claude-accounts/`. The local dashboard binds only to `127.0.0.1:3142`; the shared dashboard is at https://pair.ghackk.com and requires the owner's password.
 
@@ -36,4 +36,4 @@ Copy a closed database, or use SQLite's backup command when moving history from 
 
 ## Verification
 
-Run `node --test usage/test.js`. Private server tests additionally cover validation, per-device observations, transfer lineage, authentication, CSRF, payload limits, pairing passphrases, credential-free history, and actual client uploads/retries. PowerShell and Bash entry points are syntax-checked separately.
+Run `npm test`. GitHub Actions runs on Apple Silicon macOS, Intel macOS, Linux, and Windows. Mac tests use a temporary Keychain with synthetic credentials and verify the LaunchAgent runs. The Unix menu tests exercise creation, launch, rename, export/import, default-account metadata, deletion, and fresh installation. Private server tests additionally cover validation, per-device observations, transfer lineage, authentication, CSRF, payload limits, pairing passphrases, credential-free history, and actual client uploads/retries.

@@ -157,6 +157,12 @@ detect_pkg_manager() {
 install_pkg() {
     local pkg="$1"
     local mgr="$2"
+    [ "$pkg" != base64 ] || pkg=coreutils
+    if [ "$mgr" = brew ]; then
+        [ "$pkg" != python3 ] || pkg=python
+    else
+        [ "$pkg" != node ] || pkg=nodejs
+    fi
     case "$mgr" in
         termux)  pkg install -y "$pkg" 2>/dev/null ;;
         brew)    brew install "$pkg" 2>/dev/null ;;
@@ -664,7 +670,7 @@ launch_account() {
     echo -e "  \033[36mLaunching $selected...\033[0m"
     if [ "$selected" = "claude" ]; then
         start_usage_report
-        claude
+        (unset CLAUDE_CONFIG_DIR; claude)
         start_usage_report
     else
         bash "$ACCOUNTS_DIR/$selected.sh"
@@ -771,7 +777,12 @@ delete_account() {
         return
     fi
 
-    start_usage_report
+    if [ -f "$HOME/claude-accounts/usage/report.js" ]; then
+        node --disable-warning=ExperimentalWarning "$HOME/claude-accounts/usage/report.js" collect || {
+            echo 'Usage history could not be saved; account was not deleted.'
+            return 1
+        }
+    fi
     credential_helper remove "$HOME/.$selected" profile
     rm -f "$ACCOUNTS_DIR/$selected.sh"
     unregister_launcher "$selected"

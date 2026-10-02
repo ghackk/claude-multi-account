@@ -182,7 +182,7 @@ yay -S multi-claude
 ```bash
 # Linux / macOS
 git clone https://github.com/ghackk/claude-multi-account.git ~/claude-multi-account
-echo 'alias claude-menu="~/claude-multi-account/unix/claude-menu.sh"' >> ~/.bashrc
+bash unix/install.sh
 ```
 
 ```powershell
@@ -389,7 +389,7 @@ For `CLAUDE.md`, shared content is inserted between auto-managed markers at the 
 
 - [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed and available in PATH
 - **Windows**: PowerShell 5.1+ (dependencies auto-detected via winget/scoop)
-- **Linux/macOS**: Bash 4+ (dependencies like `curl`, `jq` auto-detected and offered for install on first run)
+- **Linux/macOS**: Bash 3.2+ (the macOS system Bash works). Dependencies including `curl`, `jq`, Python 3, and Node.js are checked on first run.
 - **Termux**: Supported — dependencies installed via `pkg`
 
 ---
@@ -415,4 +415,6 @@ Built by **[Gyanesh Kumar](https://github.com/ghackk)**
 
 Choose **U** in either menu to open the local dashboard, enable/disable reporting, or merge another PC's history. Usage is keyed by normalized email and reply ID: renaming `claude-zf` to `claude-zafff`, creating another profile for the same email, or reporting from a laptop with empty history never resets the server's all-time totals. Restored copies are deduplicated.
 
-The menu installs background session hooks, launcher triggers, and a 30-minute scheduled task/cron entry. Requires Node.js 22.13+. The dashboard shows UTC periods, model/month/device totals, account limits, and Claude Code's stats-cache comparison. [Usage tracking details](docs/usage-tracking.md).
+The menu installs background session hooks, launcher triggers, and a 30-minute Windows scheduled task, macOS LaunchAgent, or Linux cron entry. Requires Node.js 22.13+. The dashboard shows UTC periods, model/month/device totals, account limits, and Claude Code's stats-cache comparison. [Usage tracking details](docs/usage-tracking.md).
+
+macOS supports both Apple Silicon and Intel, including profile-specific Keychain credentials for account transfer and usage limits. Account renaming preserves the Keychain login. npm installation does not require lifecycle scripts, including with npm 12's defaults. Run `multi-claude` after installation to set up launchers and usage history.
