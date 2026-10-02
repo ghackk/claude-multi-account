@@ -10,20 +10,22 @@ const dataDir = process.env.CLAUDE_USAGE_DIR || path.join(home,'claude-usage-his
 const readJSON = f => { try { return JSON.parse(fs.readFileSync(f,'utf8').replace(/^\uFEFF/,'')); } catch { return null; } };
 const hash = s => crypto.createHash('sha256').update(s).digest('hex');
 function identity() {
-  let raw;
+  let raw, identity_source;
   try {
     if (process.platform === 'win32') raw = execFileSync('reg',['query','HKLM\\SOFTWARE\\Microsoft\\Cryptography','/v','MachineGuid'],{windowsHide:true}).toString().match(/MachineGuid\s+REG_SZ\s+(\S+)/)?.[1];
     else if (process.platform === 'darwin') raw = execFileSync('ioreg',['-rd1','-c','IOPlatformExpertDevice']).toString().match(/"IOPlatformUUID"\s*=\s*"([^"]+)"/)?.[1];
     else for (const f of ['/etc/machine-id','/var/lib/dbus/machine-id']) { try { raw=fs.readFileSync(f,'utf8').trim(); if(raw) break; } catch {} }
   } catch {}
+  if(raw)identity_source=process.platform==='win32'?'windows-machine-guid':process.platform==='darwin'?'macos-platform-uuid':'linux-machine-id';
   if (!raw) {
+    identity_source='local-id';
     fs.mkdirSync(dataDir,{recursive:true});
     const f = path.join(dataDir,'device-id');
     try { raw=fs.readFileSync(f,'utf8').trim(); } catch {}
     if (!raw) { raw=crypto.randomUUID(); fs.writeFileSync(f,raw,{mode:0o600}); }
   }
   // Preserve the fingerprint already used by the owner's local history.
-  return {fp:hash('claude-usage:'+raw).slice(0,16),hostname:os.hostname(),os:`${os.type()} ${os.release()}`,username:os.userInfo().username};
+  return {fp:hash('claude-usage:'+raw).slice(0,16),hostname:os.hostname(),os:`${os.type()} ${os.release()}`,username:os.userInfo().username,identity_source};
 }
 function profiles(create = true) {
   const dirs = fs.readdirSync(home,{withFileTypes:true}).filter(e=>e.isDirectory() && (e.name==='.claude'||e.name.startsWith('.claude-'))).map(e=>path.join(home,e.name));

@@ -19,6 +19,7 @@ async function upload(db,dev) {
     const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','X-Client':'claude-pair'},body:JSON.stringify(payload),signal:AbortSignal.timeout(20000)});
     if(!r.ok) throw new Error(`Report HTTP ${r.status}`);
     const result=await r.json(); if(result.accepted!==messages.length) throw new Error('Invalid report acknowledgement');
+    D.recordIp(db,dev.fp,result.ip,Date.now(),profiles.map(p=>p.email));
     D.transaction(db,()=>{const ack=db.prepare('UPDATE messages SET dirty=0 WHERE email=? AND id=?');for(const m of messages) ack.run(m.email,m.id);});
     sent+=messages.length;first=false;
     // Initial backfills can exceed the pairing service's per-minute request limit.
@@ -72,13 +73,19 @@ async function run(cmd='report') {
 }
 function serve() {
   const port=Number(process.env.CLAUDE_USAGE_PORT||3142),db=D.open(dbFile);
-  const server=http.createServer((req,res)=>{
+  const server=http.createServer(async (req,res)=>{
     const expected=`127.0.0.1:${port}`;
     if(![expected,`localhost:${port}`].includes(req.headers.host)){res.writeHead(403);res.end();return;}
     res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');
     const u=new URL(req.url,`http://${expected}`);
     if(req.method==='GET'&&u.pathname==='/api/dashboard'){
-      res.setHeader('Content-Type','application/json');res.end(JSON.stringify({...D.snapshot(db,u.searchParams.get('range'),u.searchParams.get('email')||''),local:true}));
+      res.setHeader('Content-Type','application/json');res.end(JSON.stringify({...D.snapshot(db,u.searchParams.get('range'),u.searchParams.get('email')||'',u.searchParams.get('device')||''),local:true,preview:process.env.CLAUDE_USAGE_PREVIEW==='1'}));
+    } else if(req.method==='POST'&&u.pathname==='/api/devices'){
+      if(req.headers.origin!==`http://${req.headers.host}`){res.writeHead(403);res.end();return;}
+      try {
+        let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>4096)throw Error('Payload too large');}
+        D.labelDevice(db,JSON.parse(body));res.setHeader('Content-Type','application/json');res.end('{"ok":true}');
+      } catch {res.writeHead(400,{'Content-Type':'application/json'});res.end('{"error":"Invalid device update"}');}
     } else if(req.method==='GET'&&u.pathname==='/'){
       res.setHeader('Content-Type','text/html; charset=utf-8');res.end(fs.readFileSync(path.join(__dirname,'dashboard.html')));
     } else {res.writeHead(404);res.end();}

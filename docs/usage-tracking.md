@@ -18,6 +18,16 @@ Each `(email, reply ID)` is counted once, taking the maximum of each token count
 
 All dashboard date ranges use UTC calendar days, including today. History includes subagent replies. The stats comparison displays each cache snapshot beside the retained account history across devices, so stale caches, resets, copied profiles, and subagents can explain differences. Limits are a separate account-wide signal, not token billing data. A failed limit request keeps the last good sample and visibly marks its status.
 
+## Dashboard and device recognition
+
+The dashboard has separate overview, account, device/person, model, IP-history, and activity views. Search matches emails, person/device names, system users, fingerprints, and observed IP addresses. Device names and person names are edited separately and survive later reports. Names set on a local dashboard are local; names set on the shared dashboard are stored on the server.
+
+The device fingerprint hashes Windows MachineGuid, macOS IOPlatformUUID, or Linux machine-id. The raw identifier is not uploaded. An application uninstall/reinstall normally keeps this identity; OS reinstalls, cloned machines, or the local-ID fallback can change or duplicate it. It is a recognition aid, not authentication.
+
+IP history retains every observed address with first/last-seen times, linked to a device and the emails reported from it. Only the server's connection address, or the address supplied by its trusted local reverse proxy, is recorded. These are report/transfer observations, not verified Claude sign-ins. Historical IPs from before recording started are unavailable. IP history is all-time, independent of the token date filter.
+
+Shared history, names, IPs, and health pages require the administrator's dashboard login. Ordinary reporters can submit usage but cannot read that dashboard. Reports are self-reported data: the current reporting protocol does not authenticate ownership of an email or fingerprint. Do not use these records as security or billing evidence. No dashboard password or session is included in the public package.
+
 ## Commands
 
 ```sh
