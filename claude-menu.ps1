@@ -7,7 +7,7 @@ if ($env:MULTI_CLAUDE_LIBRARY_ONLY -ne '1' -and $env:MULTI_CLAUDE_UPDATE_BOOTSTR
         return
     }
 }
-﻿$ACCOUNTS_DIR             = "$HOME\claude-accounts"
+$ACCOUNTS_DIR             = "$HOME\claude-accounts"
 $BACKUP_DIR               = "$HOME\claude-backups"
 $SHARED_DIR               = "$HOME\claude-shared"
 $SHARED_SETTINGS          = "$SHARED_DIR\settings.json"
@@ -189,15 +189,6 @@ function Get-UsageMetadata($accountName = '') {
         if ($LASTEXITCODE -eq 0) { return ($raw | ConvertFrom-Json) }
     } catch {}
     return @{ device = $null; accounts = @() }
-}
-function Show-UsageMenu {
-    Write-Host 'Usage: D dashboard | E enable reporting | X disable reporting | M merge another usage.db'
-    switch ((Read-Host 'Pick an option').ToLower()) {
-        'd' { & $UsageReporter -Dashboard }
-        'e' { & $UsageReporter -Enable }
-        'x' { & $UsageReporter -Disable }
-        'm' { $usageSource = Read-Host 'Path to another usage.db'; & node --disable-warning=ExperimentalWarning "$HOME\claude-accounts\usage\report.js" merge $usageSource }
-    }
 }
 if (Test-Path $UsageReporter) { try { & $UsageReporter -Install } catch { Write-Warning "Usage reporter setup: $($_.Exception.Message)" } }
 
@@ -958,7 +949,15 @@ function Apply-ImportToken($token) {
 
     $importConfig = "$extractDir\config"
     if (!(Test-Path $importConfig)) {
+        # Tokens from other archivers may place the profile files elsewhere.
+        $credential = Get-ChildItem -LiteralPath $extractDir -Recurse -Force -Filter '.credentials.json' -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($credential) { $importConfig = $credential.DirectoryName }
+    }
+    if (!(Test-Path $importConfig)) {
         Write-Host "  No config found in token." -ForegroundColor Red
+        $contents = Get-ChildItem -LiteralPath $extractDir -Recurse -Force -Name
+        Write-Host "  Token contains: $($contents -join ', ')" -ForegroundColor Gray
+        Write-Host "  Ask the sender to update multi-claude and send a new code." -ForegroundColor Gray
         Remove-Item $extractDir -Recurse -Force
         Remove-Item $zipPath -Force
         return $false
@@ -970,7 +969,8 @@ function Apply-ImportToken($token) {
         Copy-Item -LiteralPath "$importConfig\.claude.json" -Destination "$HOME\.claude.json" -Force
         Remove-Item -LiteralPath "$importConfig\.claude.json" -Force
     }
-    Get-ChildItem $importConfig -Force | ForEach-Object {
+    $tokenFiles = if ((Get-Item -LiteralPath $importConfig).FullName -eq (Get-Item -LiteralPath $extractDir).FullName) { @('launcher.bat', 'launcher.sh', 'profile-name.txt') } else { @() }
+    Get-ChildItem $importConfig -Force | Where-Object { $_.Name -notin $tokenFiles } | ForEach-Object {
         Copy-Item $_.FullName "$configDir\$($_.Name)" -Recurse -Force
     }
     Write-Host "  Profile restored (credentials, settings, session)" -ForegroundColor Green
@@ -1704,7 +1704,6 @@ function Show-Menu {
     Write-Host "  9. Remote Session Restore           " -ForegroundColor Green
     Write-Host "  E. Send Account (Pair Code)          " -ForegroundColor Green
     Write-Host "  I. Receive Account (Pair Code)       " -ForegroundColor Green
-    Write-Host "  U. Usage Dashboard & Reporting       " -ForegroundColor Cyan
     Write-Host "  H. Help                              " -ForegroundColor Gray
     Write-Host "  0. Exit                              " -ForegroundColor Red
     Write-Host "======================================" -ForegroundColor Cyan
@@ -1727,7 +1726,6 @@ while ($true) {
         "9" { Cloud-Restore }
         "e" { Pair-Export }
         "i" { Pair-Import }
-        "u" { Show-UsageMenu }
         "h" { Show-Help }
         "0" { Clear-Host; Write-Host "Bye!" -ForegroundColor Red; break }
         default { Write-Host "  Invalid option." -ForegroundColor Red; Start-Sleep 1 }

@@ -45,6 +45,8 @@ function install(){
   require('node:sqlite');fs.mkdirSync(path.join(target,'usage'),{recursive:true});
   for(const name of ['database.js','collector.js','credentials.js','schedule.js','report.js','install.js','sharing.js','version.js'])copy(path.join(source,'usage',name),path.join(target,'usage',name));
   for(const name of ['claude-usage-report.ps1','claude-usage-report.sh'])copy(path.join(source,name),path.join(target,name));
+  // Launchers and session hooks use this to start the updater without opening the menu.
+  if(fs.existsSync(path.join(source,'updater','update.js')))fs.writeFileSync(path.join(target,'usage','package-root.json'),JSON.stringify({root:source}));
   for(const entry of fs.readdirSync(target))if(/^claude-.*\.(bat|sh)$/.test(entry)&&!entry.startsWith('claude-usage-report'))patchLauncher(path.join(target,entry));
   const dirs=fs.readdirSync(C.home,{withFileTypes:true}).filter(e=>e.isDirectory()&&(e.name==='.claude'||e.name.startsWith('.claude-'))).map(e=>path.join(C.home,e.name));
   dirs.push(path.join(C.home,'claude-shared'));

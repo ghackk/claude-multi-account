@@ -85,7 +85,10 @@ function start(root=ROOT,base=BASE){
  try{const state=read(path.join(base,'state.json'));if(state.status==='failed'&&Date.now()-state.checked<15*60*1000)return;const p=spawn(process.execPath,[path.join(__dirname,'update.js'),'worker',root,base],{detached:true,stdio:'ignore',windowsHide:true});p.on('error',()=>{});p.unref();}catch{}
 }
 async function cli(){const command=process.argv[2],root=process.argv[3]||ROOT,base=process.argv[4]||BASE;
- if(command==='worker'){await check({root,base});return;}
+ if(command==='worker'){const r=await check({root,base});
+  // Refresh launcher-side files so the next account launch runs the new release.
+  if(r.status==='updated')spawnSync(process.execPath,['--disable-warning=ExperimentalWarning',path.join(base,'versions',r.version,'usage','install.js')],{stdio:'ignore',timeout:60000,windowsHide:true});
+  return;}
  if(command==='check'){const r=await check({root,base});console.log(JSON.stringify(r));if(r.status==='failed')process.exitCode=1;return;}
  if(command==='status'){console.log(JSON.stringify({installed:read(path.join(root,'package.json')).version,running:read(path.join(current(root,base),'package.json')).version,source:source(root),...read(path.join(base,'state.json'))},null,2));return;}
  if(command==='resolve'){start(root,base);console.log(current(root,base));return;}

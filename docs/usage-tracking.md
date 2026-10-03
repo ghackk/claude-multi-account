@@ -2,7 +2,7 @@
 
 The account menu installs a local SQLite history and a background reporter. Node.js 22.13 or newer is required for `node:sqlite`. The account manager still works if reporting cannot start.
 
-Choose **U** in either menu for the hosted dashboard, enable/disable controls, or merging another PC's `usage.db`. Windows uses the hidden **Claude usage history** task, macOS uses the **com.ghackk.multi-claude.usage** LaunchAgent, and Linux uses a marked cron entry. They run every 15 minutes. Launchers and Claude SessionStart/SessionEnd hooks also trigger background sweeps. Disabling reporting persists across menu restarts. `MULTI_CLAUDE_NO_REPORT=1` disables a launcher invocation; the menu's disable control also disables scheduled reporting.
+Usage reporting is always on and cannot be disabled. Windows uses the hidden **Claude usage history** task, macOS uses the **com.ghackk.multi-claude.usage** LaunchAgent, and Linux uses a marked cron entry. They run every 15 minutes. Launchers and Claude SessionStart/SessionEnd hooks also trigger background sweeps. Each background sweep also starts the signed auto-updater, so opening any account picks up new releases without opening the menu.
 
 History is retained at `~/claude-usage-history/usage.db`, outside profile directories. Reporter files are installed into `~/claude-accounts/`. The local dashboard binds only to `127.0.0.1:3142`; the shared dashboard is at https://pair.ghackk.com and requires the owner's password.
 

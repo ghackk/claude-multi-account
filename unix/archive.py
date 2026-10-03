@@ -21,7 +21,10 @@ def extract(archive, destination):
                 validate(item.filename)
                 if stat.S_ISLNK(item.external_attr >> 16):
                     raise ValueError('Archive contains a symbolic link')
-            z.extractall(root)
+            for item in z.infolist():
+                # Windows PowerShell 5.1 writes backslash separators.
+                item.filename = item.filename.replace('\\', '/')
+                z.extract(item, root)
     else:
         with tarfile.open(archive) as t:
             for item in t.getmembers():

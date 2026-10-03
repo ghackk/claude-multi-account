@@ -1018,7 +1018,14 @@ apply_import_token() {
 
     local importConfig="$tempDir/config"
     if [ ! -d "$importConfig" ]; then
+        # Tokens from other archivers may place the profile files elsewhere.
+        local credential=$(find "$tempDir" -name .credentials.json -type f 2>/dev/null | head -n 1)
+        [ -n "$credential" ] && importConfig=$(dirname "$credential")
+    fi
+    if [ ! -d "$importConfig" ]; then
         echo -e "  \033[31mNo config found in token.\033[0m"
+        echo -e "  \033[90mToken contains: $(cd "$tempDir" && find . -mindepth 1 | sed 's|^\./||' | paste -sd, -)\033[0m"
+        echo -e "  \033[90mAsk the sender to update multi-claude and send a new code.\033[0m"
         rm -rf "$tempDir"
         return 1
     fi
@@ -1032,6 +1039,7 @@ apply_import_token() {
         cp "$importConfig/.claude.json" "$HOME/.claude.json" || { rm -rf "$tempDir"; return 1; }
         rm -f "$importConfig/.claude.json"
     fi
+    [ "$importConfig" != "$tempDir" ] || rm -f "$tempDir/launcher.sh" "$tempDir/launcher.bat" "$tempDir/profile-name.txt"
     cp -r "$importConfig"/. "$configDir/" || { rm -rf "$tempDir"; return 1; }
     echo -e "  \033[32mProfile restored (credentials, settings, session)\033[0m"
 
@@ -1610,7 +1618,6 @@ show_menu() {
     echo -e "  \033[32m9. Remote Session Restore\033[0m"
     echo -e "  \033[32mE. Send Account (Pair Code)\033[0m"
     echo -e "  \033[32mI. Receive Account (Pair Code)\033[0m"
-    echo "  U. Usage Dashboard & Reporting"
     echo -e "  \033[90mH. Help\033[0m"
     echo -e "  \033[31m0. Exit\033[0m"
     echo -e "\033[36m======================================\033[0m"
@@ -1658,17 +1665,6 @@ while [ -L "$_usage_source" ]; do _usage_base=$(cd -P "$(dirname "$_usage_source
 USAGE_REPORTER="$(cd -P "$(dirname "$_usage_source")/.." && pwd)/claude-usage-report.sh"
 start_usage_report() { [ ! -f "$USAGE_REPORTER" ] || bash "$USAGE_REPORTER" --background; }
 usage_metadata() { node --disable-warning=ExperimentalWarning "$HOME/claude-accounts/usage/report.js" metadata "${1:-}" 2>/dev/null || printf '{"accounts":[]}'; }
-show_usage_menu() {
-    echo 'Usage: D dashboard | E enable reporting | X disable reporting | M merge another usage.db'
-    local usage_choice usage_source
-    read -r -p 'Pick an option: ' usage_choice
-    case "$usage_choice" in
-      [dD]) bash "$USAGE_REPORTER" --dashboard ;;
-      [eE]) bash "$USAGE_REPORTER" --enable ;;
-      [xX]) bash "$USAGE_REPORTER" --disable ;;
-      [mM]) read -r -p 'Path to another usage.db: ' usage_source; node --disable-warning=ExperimentalWarning "$HOME/claude-accounts/usage/report.js" merge "$usage_source" ;;
-    esac
-}
 if [ -f "$USAGE_REPORTER" ]; then bash "$USAGE_REPORTER" --install; fi
 
 while true; do
@@ -1687,7 +1683,6 @@ while true; do
         9)    cloud_restore ;;
         [eE]) pair_export ;;
         [iI]) pair_import ;;
-        [uU]) show_usage_menu ;;
         [hH]) show_help ;;
         0)    clear; echo -e "\033[36mBye!\033[0m"; break ;;
         *)    echo -e "  \033[31mInvalid option.\033[0m"; sleep 1 ;;

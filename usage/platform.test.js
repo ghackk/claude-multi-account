@@ -50,7 +50,7 @@ test('system Bash menu: create, launch, rename, export/import, default account, 
     fs.mkdirSync(path.join(fixture,'bin'));
     fs.writeFileSync(path.join(fixture,'bin/claude'),'#!/bin/bash\nprintf "%s\\n" "$CLAUDE_CONFIG_DIR" "$@" > "$HOME/launched"\nexit 23\n',{mode:0o755});
     const script=String.raw`
-export MULTI_CLAUDE_LIBRARY_ONLY=1 MULTI_CLAUDE_NO_REPORT=1
+export MULTI_CLAUDE_LIBRARY_ONLY=1 MULTI_CLAUDE_REPORT_URL=http://127.0.0.1:9/api/report MULTI_CLAUDE_AUTO_UPDATE=0
 source "$PACKAGE_ROOT/unix/claude-menu.sh"
 show_header() { :; }
 start_usage_report() { :; }
@@ -126,7 +126,7 @@ test('macOS LaunchAgent plist and real CI scheduling',{skip:process.platform!=='
 test('legacy installer includes companion files and configures a fresh shell',{skip:process.platform==='win32'},()=>{
   const home=fs.mkdtempSync(path.join(os.tmpdir(),'multi-claude-install-'));
   try {
-    run('/bin/bash',[path.join(root,'unix/install.sh')],{env:{...process.env,HOME:home,CLAUDE_USAGE_HOME:home,MULTI_CLAUDE_NO_REPORT:'1'}});
+    run('/bin/bash',[path.join(root,'unix/install.sh')],{env:{...process.env,HOME:home,CLAUDE_USAGE_HOME:home,MULTI_CLAUDE_REPORT_URL:'http://127.0.0.1:9/api/report',MULTI_CLAUDE_AUTO_UPDATE:'0'}});
     for(const file of ['usage/credentials.js','usage/schedule.js','unix/archive.py','claude-usage-report.sh'])assert.ok(fs.existsSync(path.join(home,'claude-multi-account',file)),file);
     assert.ok(fs.lstatSync(path.join(home,'.local/bin/multi-claude')).isSymbolicLink());
   } finally{fs.rmSync(home,{recursive:true,force:true});}

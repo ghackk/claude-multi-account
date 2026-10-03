@@ -1,6 +1,7 @@
 param([Parameter(Mandatory=$true)][string]$FixtureHome)
 $ErrorActionPreference='Stop'
-$env:MULTI_CLAUDE_NO_REPORT='1'
+$env:MULTI_CLAUDE_REPORT_URL='http://127.0.0.1:9/api/report'
+$env:MULTI_CLAUDE_AUTO_UPDATE='0'
 $env:CLAUDE_USAGE_HOME=$FixtureHome
 $env:CLAUDE_USAGE_DIR=Join-Path $FixtureHome 'history'
 $env:CLAUDE_CONFIG_DIR=''
