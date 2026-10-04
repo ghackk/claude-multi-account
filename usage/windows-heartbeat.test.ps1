@@ -8,7 +8,11 @@ $env:CLAUDE_CONFIG_DIR=''
 $script:registered=$false
 function New-ScheduledTaskAction { param($Execute,$Argument) return @{Execute=$Execute;Argument=$Argument} }
 function New-ScheduledTaskTrigger { param([switch]$Once,$At,$RepetitionInterval) return @{Interval=$RepetitionInterval} }
-function New-ScheduledTaskSettingsSet { param([switch]$Hidden,[switch]$StartWhenAvailable,$MultipleInstances,$ExecutionTimeLimit) return @{} }
+function New-ScheduledTaskSettingsSet {
+ param([switch]$Hidden,[switch]$StartWhenAvailable,[switch]$AllowStartIfOnBatteries,[switch]$DontStopIfGoingOnBatteries,$MultipleInstances,$ExecutionTimeLimit)
+ if(-not $AllowStartIfOnBatteries -or -not $DontStopIfGoingOnBatteries) { throw 'Usage uploads must continue on battery power' }
+ return @{}
+}
 function Register-ScheduledTask {
  param($TaskName,$Action,$Trigger,$Settings,[switch]$Force)
  if($TaskName -ne 'Claude usage history' -or $Trigger.Interval.TotalMinutes -ne 15 -or -not $Force) { throw 'Existing heartbeat was not replaced with a 15-minute schedule' }
@@ -18,7 +22,18 @@ $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $source=[IO.File]::ReadAllText((Join-Path $root 'claude-usage-report.ps1')).Replace('$PSScriptRoot',("'"+$root.Replace("'","''")+"'")).Replace('$HOME','$FixtureHome')
 & ([scriptblock]::Create($source)) -Install
 if(-not $script:registered) { throw 'Scheduler registration missing' }
+$script:powerTask = [pscustomobject]@{Settings=[pscustomobject]@{DisallowStartIfOnBatteries=$true;StopIfGoingOnBatteries=$true}; Unrelated='preserved'}
+$script:powerWrites = 0
+function Get-ScheduledTask { param($TaskName,$ErrorAction) return $script:powerTask }
+function Set-ScheduledTask { param($InputObject) $script:powerWrites++; if($InputObject.Unrelated -ne 'preserved') { throw 'Changed unrelated task configuration' } }
+. (Join-Path $root 'usage\windows-power.ps1')
+if($script:powerTask.Settings.DisallowStartIfOnBatteries -or $script:powerTask.Settings.StopIfGoingOnBatteries -or $script:powerWrites -ne 1) { throw 'Existing task power settings were not repaired' }
+. (Join-Path $root 'usage\windows-power.ps1')
+if($script:powerWrites -ne 1) { throw 'Power repair should be idempotent' }
+$script:powerTask=$null
+. (Join-Path $root 'usage\windows-power.ps1')
 foreach($file in @('sharing.js','version.js','report.js')) {
  if(!(Test-Path (Join-Path $FixtureHome "claude-accounts\usage\$file"))) { throw "Installed companion missing: $file" }
 }
 Write-Host '15-minute heartbeat upgrade and installed reporter companions verified without touching real scheduled tasks.'
+

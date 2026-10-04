@@ -22,8 +22,10 @@ test('background reporter version matches both package channels and every schedu
  const version=require('./version');assert.equal(version,require('../package.json').version);
  assert.ok(fs.readFileSync(path.join(__dirname,'../pyproject.toml'),'utf8').includes('version = "'+version+'"'));
  assert.match(require('./schedule').plist('/fixture','/fixture/node'),/<key>StartInterval<\/key><integer>900<\/integer>/);
+ assert.doesNotMatch(require('./schedule').plist('/fixture','/fixture/node'),/ACPower|Battery|PowerSource/);
  assert.match(fs.readFileSync(path.join(__dirname,'../claude-usage-report.ps1'),'utf8'),/RepetitionInterval \(New-TimeSpan -Minutes 15\)/);
  assert.match(fs.readFileSync(path.join(__dirname,'../claude-usage-report.sh'),'utf8'),/\*\/15 \* \* \* \*/);
+ assert.doesNotMatch(fs.readFileSync(path.join(__dirname,'../claude-usage-report.sh'),'utf8'),/on_ac_power|ConditionACPower|power_supply|pmset/);
 });
 test('Windows install upgrades the existing schedule and installs the executing version helper in a closed fixture',{skip:process.platform!=='win32'},()=>{
  const fixture=fs.mkdtempSync(path.join(os.tmpdir(),'heartbeat-install-'));
