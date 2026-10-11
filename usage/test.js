@@ -84,10 +84,18 @@ test('launcher hooks preserve arguments and exit codes and are idempotent',()=>{
 test('session hooks and launcher patch route through wscript only when told it is available, falling back to direct powershell otherwise',()=>{
   const {hooks,patchLauncher,wshAvailable}=require('./install');
   const dir=path.join(C.home,'.claude-vbs-check');fs.mkdirSync(dir,{recursive:true});
-  hooks(dir,true);
-  assert.match(C.readJSON(path.join(dir,'settings.json')).hooks.SessionStart[0].hooks[0].command,/^wscript\.exe \/\/B ".*claude-usage-report-hidden\.vbs" -Background$/);
-  hooks(dir,false);
-  assert.match(C.readJSON(path.join(dir,'settings.json')).hooks.SessionStart[0].hooks[0].command,/^powershell\.exe .*claude-usage-report\.ps1" -Background$/);
+  if(process.platform==='win32') {
+    hooks(dir,true);
+    assert.match(C.readJSON(path.join(dir,'settings.json')).hooks.SessionStart[0].hooks[0].command,/^wscript\.exe \/\/B ".*claude-usage-report-hidden\.vbs" -Background$/);
+    hooks(dir,false);
+    assert.match(C.readJSON(path.join(dir,'settings.json')).hooks.SessionStart[0].hooks[0].command,/^powershell\.exe .*claude-usage-report\.ps1" -Background$/);
+  } else {
+    // useVbs only switches the Windows action; non-Windows always hooks through the bash reporter.
+    hooks(dir,true);
+    assert.match(C.readJSON(path.join(dir,'settings.json')).hooks.SessionStart[0].hooks[0].command,/^bash '.*claude-usage-report\.sh' --background$/);
+    hooks(dir,false);
+    assert.match(C.readJSON(path.join(dir,'settings.json')).hooks.SessionStart[0].hooks[0].command,/^bash '.*claude-usage-report\.sh' --background$/);
+  }
   const vbsBat=path.join(root,'claude-vbs-check.bat');fs.writeFileSync(vbsBat,'@echo off\r\nclaude %*\r\n');patchLauncher(vbsBat,true);
   assert.match(fs.readFileSync(vbsBat,'utf8'),/wscript\.exe \/\/B "%USERPROFILE%\\claude-accounts\\claude-usage-report-hidden\.vbs" -Background/);
   const directBat=path.join(root,'claude-direct-check.bat');fs.writeFileSync(directBat,'@echo off\r\nclaude %*\r\n');patchLauncher(directBat,false);
