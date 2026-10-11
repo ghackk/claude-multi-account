@@ -54,6 +54,43 @@ async function run(cmd='report') {
       console.log(`Merged ${count} replies; duplicate reply IDs counted once. Source unchanged.`);
     }finally{if(other)other.close();if(db)db.close();release();}return;
   }
+  if(cmd==='backfill') {
+    const release=C.lock();if(!release)throw new Error('Reporter is running; try again shortly.');
+    let db;
+    try {
+      db=D.open(dbFile);
+      const dev=C.identity();D.device(db,dev);
+      const write=D.messageWriter(db),observe=db.prepare('INSERT OR IGNORE INTO observations VALUES(?,?,?)');
+      const count=(where='')=>db.prepare(`SELECT COUNT(*) n FROM messages${where}`).get().n;
+      const beforeTotal=count(),beforeSub=count(' WHERE subagent=1');
+      let files=0,skipped=0,lines=0;
+      for(const p of C.profiles()) {
+        for(const file of C.transcripts(path.join(p.dir,'projects'))) {
+          let stat;try{stat=fs.statSync(file);}catch{continue;}
+          // A single conversation transcript has never been observed near this size; skip rather than risk OOM on a corrupt/foreign file.
+          if(stat.size>500*1024*1024){skipped++;continue;}
+          let text;try{text=fs.readFileSync(file,'utf8');}catch{continue;}
+          files++;
+          D.transaction(db,()=>{
+            for(const line of text.split('\n')) {
+              if(!line.includes('"usage"')) continue;
+              let j;try{j=JSON.parse(line);}catch{continue;}
+              const rec=C.extractUsage(j);
+              if(!rec) continue;
+              D.writeMessage(write,{email:p.email,id:rec.id,profile:p.instance,session:j.sessionId||'',model:rec.model,ts:rec.ts,device:dev.fp,
+                subagent:rec.subagent,...Object.fromEntries(D.COUNTERS.map((k,i)=>[k,rec.vals[i]]))});
+              observe.run(p.email,rec.id,dev.fp); lines++;
+            }
+          });
+        }
+      }
+      const afterTotal=count(),afterSub=count(' WHERE subagent=1');
+      console.log(`Rescanned ${files} transcript file(s)${skipped?` (${skipped} skipped, over 500 MB)`:''} across ${C.profiles(false).length} profile(s); ${lines} usage line(s) matched.`);
+      console.log(`Replies: ${beforeTotal} -> ${afterTotal} (+${afterTotal-beforeTotal}). Subagent replies: ${beforeSub} -> ${afterSub} (+${afterSub-beforeSub} recovered).`);
+      console.log('Recovered rows are marked dirty and will upload on the next report run.');
+    } finally {if(db)db.close();release();}
+    return;
+  }
   if(cmd==='metadata') {console.log(JSON.stringify({device:C.identity(),accounts:C.profiles(false).filter(p=>!process.argv[3]||p.name===process.argv[3]).map(p=>p.email)}));return;}
   if(cmd==='serve') return serve();
   if(cmd==='json') {const db=D.open(dbFile);try{console.log(JSON.stringify(D.snapshot(db)));}finally{db.close();}return;}

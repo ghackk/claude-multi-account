@@ -46,6 +46,25 @@ function* transcripts(dir) {
   let entries; try { entries=fs.readdirSync(dir,{withFileTypes:true}); } catch { return; }
   for (const e of entries) { const f=path.join(dir,e.name); if(e.isDirectory()) yield* transcripts(f); else if(e.isFile()&&e.name.endsWith('.jsonl')) yield f; }
 }
+function usageVals(u) {
+  return [u.input_tokens,u.output_tokens,u.cache_read_input_tokens,u.cache_creation_input_tokens].map(v=>Number.isSafeInteger(v)&&v>=0?v:0);
+}
+// A main-session turn is a top-level {type:'assistant'} line. A subagent (Task-tool) turn is
+// relayed inline in the parent transcript as {type:'progress', data:{type:'agent_progress', message:{type:'assistant', message:{...}}}}
+// — it is never written under a literal "subagents" directory, so detection must read the shape, not the path.
+function extractUsage(j) {
+  if (j.type==='assistant') {
+    const m=j.message, ts=Date.parse(j.timestamp);
+    if(!m?.usage||!m.id||m.model==='<synthetic>'||!Number.isFinite(ts)) return null;
+    return {id:m.id,model:m.model||'unknown',ts,subagent:false,vals:usageVals(m.usage)};
+  }
+  if (j.type==='progress' && j.data?.type==='agent_progress') {
+    const inner=j.data.message, m=inner?.message, ts=Date.parse(inner?.timestamp ?? j.timestamp);
+    if(inner?.type!=='assistant'||!m?.usage||!m.id||m.model==='<synthetic>'||!Number.isFinite(ts)) return null;
+    return {id:m.id,model:m.model||'unknown',ts,subagent:true,vals:usageVals(m.usage)};
+  }
+  return null;
+}
 function cleanStats(s) {
   if (!s || typeof s !== 'object') return null;
   const modelUsage={};
@@ -93,12 +112,11 @@ function collect(db) {
               for(const line of carry.subarray(0,end).toString('utf8').split('\n')) {
                 if(!line.includes('"usage"')) continue;
                 let j; try{j=JSON.parse(line);}catch{continue;}
-                const m=j.message, ts=Date.parse(j.timestamp);
-                if(j.type!=='assistant'||!m?.usage||!m.id||m.model==='<synthetic>'||!Number.isFinite(ts)) continue;
-                const u=m.usage, vals=[u.input_tokens,u.output_tokens,u.cache_read_input_tokens,u.cache_creation_input_tokens].map(v=>Number.isSafeInteger(v)&&v>=0?v:0);
-                D.writeMessage(write,{email:p.email,id:m.id,profile:p.instance,session:j.sessionId||'',model:m.model||'unknown',ts,device:dev.fp,
-                  subagent:file.split(path.sep).includes('subagents'),...Object.fromEntries(D.COUNTERS.map((k,i)=>[k,vals[i]]))});
-                observe.run(p.email,m.id,dev.fp); lines++;
+                const rec=extractUsage(j);
+                if(!rec) continue;
+                D.writeMessage(write,{email:p.email,id:rec.id,profile:p.instance,session:j.sessionId||'',model:rec.model,ts:rec.ts,device:dev.fp,
+                  subagent:rec.subagent,...Object.fromEntries(D.COUNTERS.map((k,i)=>[k,rec.vals[i]]))});
+                observe.run(p.email,rec.id,dev.fp); lines++;
               }
               consumed+=end+1; carry=carry.subarray(end+1);
             }
@@ -155,4 +173,4 @@ function lock() {
   }
   return ()=>{try{fs.unlinkSync(file);}catch{}};
 }
-module.exports={home,dataDir,readJSON,identity,profiles,collect,limits,lock,cleanStats};
+module.exports={home,dataDir,readJSON,identity,profiles,collect,limits,lock,cleanStats,transcripts,extractUsage};

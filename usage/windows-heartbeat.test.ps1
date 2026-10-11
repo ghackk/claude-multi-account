@@ -35,5 +35,6 @@ $script:powerTask=$null
 foreach($file in @('sharing.js','version.js','report.js')) {
  if(!(Test-Path (Join-Path $FixtureHome "claude-accounts\usage\$file"))) { throw "Installed companion missing: $file" }
 }
+if(!(Test-Path (Join-Path $FixtureHome 'claude-accounts\claude-usage-report-hidden.vbs'))) { throw 'Installed companion missing: claude-usage-report-hidden.vbs' }
 Write-Host '15-minute heartbeat upgrade and installed reporter companions verified without touching real scheduled tasks.'
 

@@ -38,7 +38,10 @@ node ~/claude-accounts/usage/report.js json      # retained history as JSON
 node ~/claude-accounts/usage/report.js disable
 node ~/claude-accounts/usage/report.js enable
 node ~/claude-accounts/usage/report.js merge /path/to/other/usage.db
+node ~/claude-accounts/usage/report.js backfill  # re-scan already-consumed transcripts for missed replies
 ```
+
+Subagent (Task-tool) replies are relayed inline in the parent transcript as `{type:'progress', data:{type:'agent_progress', message:{type:'assistant', message:{...usage...}}}}`, never under a separate directory. Versions before the `extractUsage` fix only recognized top-level `{type:'assistant'}` lines and silently dropped every subagent reply's tokens; `files.offset` had already advanced past that content, so a code fix alone does not recover it. Run `backfill` once per device after upgrading to re-scan every tracked transcript in full (ignoring the stored offset) and insert any replies the live collector missed; it never rewinds `files.offset`, so the normal incremental collector is unaffected and `backfill` is safe to re-run.
 
 Copy a closed database, or use SQLite's backup command when moving history from a running PC. Do not copy only the main `.db` while a WAL writer is active. The merge reads the source without modifying it and is safe to repeat. It refuses old rows with no device attribution; run collection on the source PC first.
 
