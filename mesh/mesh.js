@@ -180,8 +180,9 @@ function unshareMemory(){
     for(const k of keys){
       const m=path.join(projects,k,'memory');
       if(!isLink(m)) continue;
-      const shared=real(m);
-      if(!shared||!path.resolve(shared).toLowerCase().startsWith(path.resolve(root).toLowerCase())) continue;
+      // Compare real paths: on macOS the temp and home trees sit behind symlinks (/var -> /private/var).
+      const shared=real(m),under=projectKey(path.resolve(real(root)||root)+path.sep);
+      if(!shared||!projectKey(path.resolve(shared)+path.sep).startsWith(under)) continue;
       fs.rmSync(m,{force:true});
       const backup=findBackup(a.name,k);
       if(!backup){report.push(`memory ${k}: link removed from ${a.name}`);continue;}
