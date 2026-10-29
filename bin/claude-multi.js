@@ -20,6 +20,17 @@ if (process.argv.includes('--version')) {
     console.log(require(path.join(rootDir, 'package.json')).version);
     process.exit(0);
 }
+// Session mesh: share every account's live-session list (on by default), plus the
+// sessions/read/spawn/mesh subcommands for working across accounts.
+const meshScript = path.join(rootDir, 'mesh', 'mesh.js');
+if (['sessions', 'read', 'spawn', 'mesh'].includes(process.argv[2])) {
+    const mesh = spawnSync(process.execPath, [meshScript, ...process.argv.slice(2)], { stdio: 'inherit' });
+    process.exit(mesh.status ?? 1);
+}
+if (process.env.MULTI_CLAUDE_MESH !== '0') {
+    spawnSync(process.execPath, [meshScript, 'mesh', 'link', '--quiet'], { stdio: 'ignore', windowsHide: true });
+}
+
 const windows = os.platform() === 'win32';
 const result = spawnSync(windows ? 'powershell' : '/bin/bash', windows
     ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(rootDir, 'claude-menu.ps1')]

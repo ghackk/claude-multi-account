@@ -183,6 +183,9 @@ if ($userPath -notlike "*claude-accounts*") {
 # Usage reporting is installed from this package; failures never prevent account management.
 $UsageReporter = Join-Path $PSScriptRoot 'claude-usage-report.ps1'
 function Start-UsageReport { if (Test-Path $UsageReporter) { & $UsageReporter -Background } }
+# Session mesh: one shared live-session list for all accounts (see mesh/mesh.js).
+$MeshScript = Join-Path $PSScriptRoot 'mesh\mesh.js'
+function Link-Sessions { if ($env:MULTI_CLAUDE_MESH -ne '0' -and (Test-Path $MeshScript)) { & node $MeshScript mesh link --quiet 2>$null | Out-Null } }
 function Get-UsageMetadata($accountName = '') {
     try {
         $raw = & node --disable-warning=ExperimentalWarning "$HOME\claude-accounts\usage\report.js" metadata $accountName 2>$null
@@ -594,6 +597,7 @@ function Create-Account {
     # Auto-apply shared settings to brand new account
     Merge-SharedIntoAccount "claude-$name"
     Write-Host "  Shared settings applied automatically." -ForegroundColor Gray
+    Link-Sessions
 
     Write-Host ""
     Write-Host "  Created claude-$name successfully!" -ForegroundColor Green
@@ -1704,6 +1708,7 @@ function Show-Menu {
     Write-Host "  9. Remote Session Restore           " -ForegroundColor Green
     Write-Host "  E. Send Account (Pair Code)          " -ForegroundColor Green
     Write-Host "  I. Receive Account (Pair Code)       " -ForegroundColor Green
+    Write-Host "  S. Sessions (all accounts) / Spawn   " -ForegroundColor Cyan
     Write-Host "  H. Help                              " -ForegroundColor Gray
     Write-Host "  0. Exit                              " -ForegroundColor Red
     Write-Host "======================================" -ForegroundColor Cyan
@@ -1711,6 +1716,7 @@ function Show-Menu {
 }
 
 while ($true) {
+    Link-Sessions
     if (Test-Path "$HOME\claude-accounts\usage\install.js") { & node --disable-warning=ExperimentalWarning "$HOME\claude-accounts\usage\install.js" 2>$null }
     Show-Menu
     $choice = Read-Host "  Pick an option"
@@ -1726,6 +1732,7 @@ while ($true) {
         "9" { Cloud-Restore }
         "e" { Pair-Export }
         "i" { Pair-Import }
+        "s" { Link-Sessions; & node $MeshScript menu }
         "h" { Show-Help }
         "0" { Clear-Host; Write-Host "Bye!" -ForegroundColor Red; break }
         default { Write-Host "  Invalid option." -ForegroundColor Red; Start-Sleep 1 }

@@ -320,6 +320,27 @@ claude-personal
 
 On **Linux/macOS/Termux**, symlinks are created in `~/.local/bin/`. On **Windows**, the accounts directory is added to your user PATH. Profiles created, imported, or restored are all registered automatically.
 
+### Sessions Across Accounts (Option S)
+
+Claude Code only lists and messages sessions of the same account. multi-claude points every profile's `sessions/` folder at one shared folder (`~/claude-shared/sessions`), so **live sessions of every account see each other** in `ListAgents` and can talk with `SendMessage`. Existing profiles, already-running sessions and profiles added later all join automatically on each start (`MULTI_CLAUDE_MESH=0` turns this off).
+
+```bash
+multi-claude sessions                         # live sessions of all accounts, with account names
+multi-claude read <name|session-id>           # latest messages of any session
+multi-claude spawn work "fix the tests"       # new session on another account, in a visible terminal tab
+multi-claude spawn work "summarise X" --headless   # run in the background, print the answer + SESSION=<id>
+multi-claude spawn work --resume <session-id> # reopen an existing session in a visible tab
+multi-claude mesh status | link | off         # check, re-link, or undo the shared session list
+```
+
+**No commands needed inside Claude:** every account also gets a `multi-claude` MCP server with `list_sessions`, `read_session` and `start_session` tools, so you can just ask a session *"start a session on the work account and have it fix the tests, tell me when it's done"*. Spawned sessions show up in every other session's `ListAgents`, so one session can orchestrate others on different accounts. The menu's **S** option does the same interactively. `MULTI_CLAUDE_MESH_TOOLS=0` skips the tool registration.
+
+**Hand over only what's needed (handoff):** `start_session` lets the calling session pass a `brief` it writes itself, the memory `notes` that hold the rules the task needs, and a few `recent_turns`, so the new session gets a small focused context instead of the whole conversation (CLI: `--brief`, `--notes a.md,b.md`, `--recent N --from <session>`). Each handoff is saved in `~/claude-shared/handoffs/`.
+
+**Hand over everything (fork):** when a brief would lose too much, `fork:"self"` (CLI `--fork <session>`) copies the whole conversation to the other account and continues it there as a new session. It costs more on that account, so the tool guides Claude to choose a handoff by default and fork only when needed. Each account keeps its own memory notes.
+
+**Optional: same notes on every account** (`multi-claude mesh memory-on`, off by default). Each project's memory moves to `~/claude-shared/memory/<project>` and every profile links to it. The merge keeps the newest copy of each file, combines `MEMORY.md` indexes, backs the originals up to `~/claude-shared/memory-backup-<date>/`, and keeps losing versions in `~/claude-shared/memory-conflicts/`. `multi-claude mesh memory-off` restores each account's own notes from the backup.
+
 ---
 
 ## How It Works

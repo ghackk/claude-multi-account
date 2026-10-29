@@ -277,6 +277,10 @@ show_header() {
 
 # ─── ACCOUNT HELPERS ────────────────────────────────────────────────────────
 
+# Session mesh: one shared live-session list for all accounts (see mesh/mesh.js).
+MESH_SCRIPT="$MENU_ROOT/mesh/mesh.js"
+link_sessions() { [ "${MULTI_CLAUDE_MESH:-}" = 0 ] || [ ! -f "$MESH_SCRIPT" ] || node "$MESH_SCRIPT" mesh link --quiet >/dev/null 2>&1; }
+
 # Resolve config directory for an account name.
 # "claude" (default) -> ~/.claude, others -> ~/.<name>
 get_config_dir() {
@@ -635,6 +639,7 @@ claude "\$@"
 ENDSH
     chmod +x "$shFile"
     register_launcher "claude-$name"
+    link_sessions
     node --disable-warning=ExperimentalWarning "$HOME/claude-accounts/usage/install.js" 2>/dev/null
 
     # Auto-apply shared settings
@@ -1618,6 +1623,7 @@ show_menu() {
     echo -e "  \033[32m9. Remote Session Restore\033[0m"
     echo -e "  \033[32mE. Send Account (Pair Code)\033[0m"
     echo -e "  \033[32mI. Receive Account (Pair Code)\033[0m"
+    echo -e "  \033[36mS. Sessions (all accounts) / Spawn\033[0m"
     echo -e "  \033[90mH. Help\033[0m"
     echo -e "  \033[31m0. Exit\033[0m"
     echo -e "\033[36m======================================\033[0m"
@@ -1668,6 +1674,7 @@ usage_metadata() { node --disable-warning=ExperimentalWarning "$HOME/claude-acco
 if [ -f "$USAGE_REPORTER" ]; then bash "$USAGE_REPORTER" --install; fi
 
 while true; do
+    link_sessions
     [ ! -f "$HOME/claude-accounts/usage/install.js" ] || node --disable-warning=ExperimentalWarning "$HOME/claude-accounts/usage/install.js" 2>/dev/null
     show_menu
     read -r -p "  Pick an option: " choice || break
@@ -1683,6 +1690,7 @@ while true; do
         9)    cloud_restore ;;
         [eE]) pair_export ;;
         [iI]) pair_import ;;
+        [sS]) link_sessions; node "$MESH_SCRIPT" menu ;;
         [hH]) show_help ;;
         0)    clear; echo -e "\033[36mBye!\033[0m"; break ;;
         *)    echo -e "  \033[31mInvalid option.\033[0m"; sleep 1 ;;
