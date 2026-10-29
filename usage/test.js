@@ -4,6 +4,9 @@ const {spawnSync}=require('child_process');
 const D=require('./database');
 const root=fs.mkdtempSync(path.join(os.tmpdir(),'multi-claude-test-'));
 process.env.CLAUDE_USAGE_HOME=path.join(root,'home');process.env.CLAUDE_USAGE_DIR=path.join(root,'data');fs.mkdirSync(process.env.CLAUDE_USAGE_HOME);
+// The collector also reads the profile in CLAUDE_CONFIG_DIR; run from inside a Claude session that
+// is a real profile, which would pour real transcripts into these fixture counts.
+delete process.env.CLAUDE_CONFIG_DIR;
 const C=require('./collector');
 const profile=path.join(C.home,'.claude-fixture'),project=path.join(profile,'projects','one');fs.mkdirSync(project,{recursive:true});
 fs.writeFileSync(path.join(profile,'.claude.json'),JSON.stringify({oauthAccount:{emailAddress:'owner@example.com',accountUuid:'a'}}));
