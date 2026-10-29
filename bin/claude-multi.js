@@ -12,7 +12,14 @@ if (process.argv.includes('--update-now') || process.argv.includes('--update-sta
 }
 if (process.env.MULTI_CLAUDE_UPDATE_BOOTSTRAPPED !== '1') {
     if (!process.argv.includes('--version')) updater.start(rootDir);
-    rootDir = updater.current(rootDir);
+    const selected = updater.current(rootDir);
+    // A newer downloaded release takes over the whole command, so its own subcommands work too
+    // (this installed entry point may predate them).
+    if (selected !== rootDir) {
+        process.env.MULTI_CLAUDE_UPDATE_BOOTSTRAPPED = '1';
+        const next = spawnSync(process.execPath, [path.join(selected, 'bin', 'claude-multi.js'), ...process.argv.slice(2)], { stdio: 'inherit' });
+        process.exit(next.status ?? 1);
+    }
 }
 process.env.MULTI_CLAUDE_UPDATE_BOOTSTRAPPED = '1';
 

@@ -24,6 +24,8 @@
 
 Each menu launch starts a nonblocking check of `https://pair.ghackk.com/updates/stable.json`. If the server is unavailable, the updater checks the signed `stable.json` asset on the latest GitHub release. The application keeps running while the check happens. Failed checks back off for 15 minutes; offline operation uses the last working installation.
 
+Opening an account directly (`claude-work`, or any session start) runs the same check in the hidden background reporter, so updates arrive without opening the menu: a new release is downloaded while Claude starts and takes effect at the next launch. The same background step keeps the session mesh linked, so new accounts and new releases join without the menu. When a newer release has been downloaded, the installed `multi-claude` command hands the whole command line to it, so new subcommands work right away.
+
 The manifest is signed with a pinned Ed25519 key and contains a version, expiry, Node requirement, exact archive size and SHA-256 hash. Downloads try the server-hosted archive, then the GitHub release archive. On Windows the transport fallbacks are Node HTTPS, curl, then PowerShell; macOS/Linux use Node HTTPS then curl. All paths require HTTPS. Invalid signatures, expired manifests, corrupt archives and downgrades are rejected.
 
 Updates install application files into `~/.multi-claude-updates/versions/`, then atomically switch the selected version after validation. The next menu launch uses that version. The prior installed package and cached version remain available if a cached release is incomplete. Account profiles, credentials, backups and usage history are never part of the update directory. No administrator access, package-manager switching or lifecycle scripts are needed.

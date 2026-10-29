@@ -87,7 +87,13 @@ function start(root=ROOT,base=BASE){
 async function cli(){const command=process.argv[2],root=process.argv[3]||ROOT,base=process.argv[4]||BASE;
  if(command==='worker'){const r=await check({root,base});
   // Refresh launcher-side files so the next account launch runs the new release.
-  if(r.status==='updated')spawnSync(process.execPath,['--disable-warning=ExperimentalWarning',path.join(base,'versions',r.version,'usage','install.js')],{stdio:'ignore',timeout:60000,windowsHide:true});
+  if(r.status==='updated'){
+   const next=path.join(base,'versions',r.version);
+   spawnSync(process.execPath,['--disable-warning=ExperimentalWarning',path.join(next,'usage','install.js')],{stdio:'ignore',timeout:60000,windowsHide:true});
+   // The new release's session mesh (shared session list, tools) is in place for the next session too.
+   const mesh=path.join(next,'mesh','mesh.js');
+   if(process.env.MULTI_CLAUDE_MESH!=='0'&&fs.existsSync(mesh))spawnSync(process.execPath,[mesh,'mesh','link','--quiet'],{stdio:'ignore',timeout:60000,windowsHide:true});
+  }
   return;}
  if(command==='check'){const r=await check({root,base});console.log(JSON.stringify(r));if(r.status==='failed')process.exitCode=1;return;}
  if(command==='status'){console.log(JSON.stringify({installed:read(path.join(root,'package.json')).version,running:read(path.join(current(root,base),'package.json')).version,source:source(root),...read(path.join(base,'state.json'))},null,2));return;}

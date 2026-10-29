@@ -43,3 +43,16 @@ test('corrupt cached release falls back to previous verified installation',async
 test('damaged cache is repaired from a verified archive without losing the base install',async()=>{
  const f=fixture();try{const bytes=release(),signed=manifest(bytes),download=async u=>u.endsWith('.json')?signed:bytes;await U.check({...f,download});fs.unlinkSync(path.join(f.base,'versions','1.0.30','bin','claude-multi.js'));assert.equal(U.current(f.root,f.base),f.root);assert.equal((await U.check({...f,download})).status,'updated');assert.equal(U.current(f.root,f.base),path.join(f.base,'versions','1.0.30'));assert(fs.existsSync(path.join(f.root,'package.json')));}finally{cleanup(f.dir);}
 });
+test('the installed entry point hands the whole command, arguments included, to a newer downloaded release',()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'multi-update-test-'));try{
+ const base=path.join(dir,'updates'),next=path.join(base,'versions','99.0.0');
+ for(const f of ['claude-menu.ps1','unix/claude-menu.sh','usage/report.js','updater/update.js']){fs.mkdirSync(path.dirname(path.join(next,f)),{recursive:true});fs.writeFileSync(path.join(next,f),'');}
+ fs.mkdirSync(path.join(next,'bin'),{recursive:true});
+ fs.writeFileSync(path.join(next,'bin','claude-multi.js'),"console.log('newer '+process.argv.slice(2).join(' '))");
+ fs.writeFileSync(path.join(next,'package.json'),JSON.stringify({name:'@ghackk/multi-claude',version:'99.0.0'}));
+ fs.writeFileSync(path.join(base,'state.json'),JSON.stringify({current:'99.0.0',highest:'99.0.0',status:'failed',checked:Date.now()}));
+ const r=require('child_process').spawnSync(process.execPath,[path.join(__dirname,'..','bin','claude-multi.js'),'sessions','--json'],
+  {encoding:'utf8',env:{...process.env,MULTI_CLAUDE_UPDATE_DIR:base,MULTI_CLAUDE_UPDATE_BOOTSTRAPPED:'',MULTI_CLAUDE_AUTO_UPDATE:'0',MULTI_CLAUDE_MESH:'0'},timeout:20000});
+ assert.equal(r.stdout.trim(),'newer sessions --json',r.stderr);
+ }finally{cleanup(dir);}
+});
